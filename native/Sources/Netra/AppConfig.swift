@@ -12,10 +12,6 @@ enum AppConfig {
         URL(string: "https://github.com/\(githubOwner)/\(githubRepo)")!
     }
 
-    static var latestReleaseAPI: URL {
-        URL(string: "https://api.github.com/repos/\(githubOwner)/\(githubRepo)/releases/latest")!
-    }
-
     static var releasesPageURL: URL {
         URL(string: "https://github.com/\(githubOwner)/\(githubRepo)/releases")!
     }
