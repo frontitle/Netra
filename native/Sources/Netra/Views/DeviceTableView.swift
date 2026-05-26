@@ -194,9 +194,9 @@ struct DeviceTableView: NSViewRepresentable {
       switch col {
       case .ip: return device.ip
       case .hostname:
-        let name = DeviceNotesStore.shared.displayName(discovered: device.hostname, ip: device.ip)
-        if device.isOnline { return name }
-        return "\(name) (\(L10n.string(.deviceOffline, language: language)))"
+        let discovered = device.hostname.isEmpty || device.hostname == "—" ? "—" : device.hostname
+        if device.isOnline { return discovered }
+        return "\(discovered) (\(L10n.string(.deviceOffline, language: language)))"
       case .vendor: return device.vendor
       case .role: return device.role
       case .ports:

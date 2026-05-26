@@ -1,12 +1,13 @@
 import Foundation
 
 enum DeviceInference {
-    static func inferRole(ip: String, localIP: String, gateway: String, vendor: String, ports: [OpenPort], os: String) -> String {
+    /// 设备类型（不含操作系统名称）。
+    static func inferRole(ip: String, localIP: String, gateway: String, vendor: String, ports: [OpenPort]) -> String {
         let portSet = Set(ports.map(\.port))
         if ip == gateway { return "Gateway / Router" }
         if portSet.contains(53) && (portSet.contains(67) || portSet.contains(68)) { return "DHCP / DNS Server" }
-        if portSet.contains(445) || portSet.contains(139) { return "Windows / SMB" }
-        if portSet.contains(548) || portSet.contains(7000) || portSet.contains(5000) { return "macOS / Apple" }
+        if portSet.contains(445) || portSet.contains(139) { return "File Sharing (SMB)" }
+        if portSet.contains(548) || portSet.contains(7000) || portSet.contains(5000) { return "Apple Device" }
         if portSet.contains(631) || portSet.contains(9100) { return "Printer" }
         if portSet.contains(554) || portSet.contains(8554) { return "Camera / NVR" }
         if portSet.contains(502) { return "Industrial (Modbus)" }
@@ -18,9 +19,7 @@ enum DeviceInference {
             return "Web Service"
         }
         if portSet.contains(5000) || portSet.contains(5001) { return "NAS / Storage" }
-        if os.contains("macOS") || os.contains("Apple") { return "Apple Device" }
-        if os.contains("Windows") { return "Windows PC" }
-        if os.contains("Linux") { return "Linux Host" }
+        if vendor.lowercased().contains("apple") { return "Apple Device" }
         return "Network Device"
     }
 
@@ -46,25 +45,26 @@ enum DeviceInference {
         return "Unknown"
     }
 
-    /// 综合 ARP、mDNS 缓存、反向 DNS、SMB 等解析可读的设备名。
+    /// 嗅探设备自身报告的主机名（非应用生成名）。
     static func hostname(from arp: String?, ip: String) -> String {
-        if let arp = sanitizeHostname(arp), !arp.isEmpty { return arp }
-        if let name = dscacheHost(ip: ip) { return sanitizeHostname(name) ?? name }
-        if let name = reverseDNS(ip: ip) { return sanitizeHostname(name) ?? name }
-        if let name = smbutilName(ip: ip) { return sanitizeHostname(name) ?? name }
+        if let name = sanitizeHostname(arp) { return name }
+        if let name = dscacheHost(ip: ip).flatMap(sanitizeHostname) { return name }
+        if let name = reverseDNS(ip: ip).flatMap(sanitizeHostname) { return name }
+        if let name = smbutilName(ip: ip).flatMap(sanitizeHostname) { return name }
         if let name = refreshedARPName(ip: ip) { return name }
-        return "host-\(ip.split(separator: ".").last ?? "0")"
+        return "—"
     }
 
     static func localDNS(hostname: String, ip: String) -> String {
+        if hostname == "—" { return "\(ip.replacingOccurrences(of: ".", with: "-")).local" }
         if hostname.contains(".") { return hostname }
-        if !hostname.hasPrefix("host-") { return "\(hostname).local" }
-        return "\(ip.replacingOccurrences(of: ".", with: "-")).local"
+        return "\(hostname).local"
     }
 
     private static func sanitizeHostname(_ raw: String?) -> String? {
         guard var name = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return nil }
-        if name == "?" || name == "(null)" { return nil }
+        if name == "?" || name == "(null)" || name == "—" { return nil }
+        if name.lowercased().hasPrefix("host-") { return nil }
         if name.hasSuffix(".") { name.removeLast() }
         if name.contains("\\") {
             name = name.split(separator: "\\").last.map(String.init) ?? name
@@ -98,7 +98,8 @@ enum DeviceInference {
         for line in output.split(separator: "\n") {
             let row = String(line)
             if row.contains("domain name pointer") {
-                return row.split(separator: " ").last.map(String.init)?.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+                return row.split(separator: " ").last.map(String.init)?
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "."))
             }
         }
         return nil

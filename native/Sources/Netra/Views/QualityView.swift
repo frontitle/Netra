@@ -5,35 +5,39 @@ struct QualityView: View {
     @EnvironmentObject private var prefs: AppPreferences
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text(prefs.l10n(.qualityTitle)).font(.largeTitle.bold())
-                Spacer()
-                Button(app.qualityLoading ? prefs.l10n(.qualityRunning) : prefs.l10n(.qualityStart)) {
-                    Task { await app.runQualityCheck() }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Text(prefs.l10n(.qualityTitle)).font(.largeTitle.bold())
+                    Spacer()
+                    Button(app.qualityLoading ? prefs.l10n(.qualityRunning) : prefs.l10n(.qualityStart)) {
+                        Task { await app.runQualityCheck() }
+                    }
+                    .disabled(app.qualityLoading)
                 }
-                .disabled(app.qualityLoading)
+                if let q = app.quality {
+                    Text(q.diagnosis).font(.headline)
+                    livePingCard(prefs.l10n(.qualityGateway), app.liveQualityStats(fallback: q.gateway))
+                    ForEach(q.external) { livePingCard($0.label, app.liveQualityStats(fallback: $0)) }
+                    if !q.devices.isEmpty {
+                        Text(prefs.l10n(.qualityInternalSample)).font(.subheadline).foregroundStyle(.secondary)
+                        ForEach(q.devices) { livePingCard($0.target, app.liveQualityStats(fallback: $0)) }
+                    }
+                } else {
+                    VStack(spacing: 8) {
+                        Image(systemName: "waveform.path.ecg").font(.largeTitle).foregroundStyle(.secondary)
+                        Text(prefs.l10n(.qualityNotRun)).font(.headline)
+                        Text(prefs.l10n(.qualityHint)).font(.callout).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                }
             }
-            if let q = app.quality {
-                Text(q.diagnosis).font(.headline)
-                livePingCard(prefs.l10n(.qualityGateway), app.liveQualityStats(fallback: q.gateway))
-                ForEach(q.external) { livePingCard($0.label, app.liveQualityStats(fallback: $0)) }
-                if !q.devices.isEmpty {
-                    Text(prefs.l10n(.qualityInternalSample)).font(.subheadline).foregroundStyle(.secondary)
-                    ForEach(q.devices) { livePingCard($0.target, app.liveQualityStats(fallback: $0)) }
-                }
-            } else {
-                VStack(spacing: 8) {
-                    Image(systemName: "waveform.path.ecg").font(.largeTitle).foregroundStyle(.secondary)
-                    Text(prefs.l10n(.qualityNotRun)).font(.headline)
-                    Text(prefs.l10n(.qualityHint)).font(.callout).foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            Spacer()
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding()
         .onAppear { app.syncPingLoopsForCurrentSection() }
+        .onDisappear { app.syncPingLoopsForCurrentSection() }
     }
 
     private func livePingCard(_ title: String, _ stats: PingStats) -> some View {
@@ -48,9 +52,9 @@ struct QualityView: View {
             LivePingView(
                 samples: app.qualityPingHistory[stats.target] ?? [],
                 stats: stats,
-                pulse: app.qualityPingPulse
+                pulse: app.qualityPingPulse,
+                tick: app.qualityPingTick
             )
-            .id("\(stats.target)-\(app.qualityPingTick)")
         }
         .padding(12)
         .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))

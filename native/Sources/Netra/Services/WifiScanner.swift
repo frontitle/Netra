@@ -3,9 +3,12 @@ import Foundation
 
 enum WifiScanner {
     static func scan() -> [WifiNetwork] {
-        guard let list = scanCoreWLAN(), !list.isEmpty else {
-            return scanSystemProfiler()
+        let connectedBSSID = CWWiFiClient.shared().interface()?.bssid() ?? ""
+        var list = scanCoreWLAN() ?? []
+        if list.isEmpty {
+            list = scanSystemProfiler()
         }
+        annotateAPRoles(&list, connectedBSSID: connectedBSSID)
         return sortNetworks(list)
     }
 
@@ -32,7 +35,7 @@ enum WifiScanner {
         let requiresPassword = !net.supportsSecurity(.none)
         let isConnected = (!connectedSSID.isEmpty && ssid == connectedSSID)
             || (!connectedBSSID.isEmpty && bssid.caseInsensitiveCompare(connectedBSSID) == .orderedSame)
-        let apName = inferAPName(ssid: ssid, bssid: bssid, isIBSS: net.ibss)
+        let apName = ""
         let rates = estimateRates(channel: ch, phy: phyModeLabel(ch))
         return WifiNetwork(
             ssid: ssid,
@@ -69,14 +72,58 @@ enum WifiScanner {
         }
     }
 
-    private static func inferAPName(ssid: String, bssid: String, isIBSS: Bool) -> String {
-        if isIBSS { return "Ad-hoc (\(ssid))" }
-        if bssid.isEmpty { return ssid }
-        let vendor = OUILookup.vendor(for: bssid)
-        if vendor != "Unknown vendor", !ssid.isEmpty {
-            return "\(ssid) · \(vendor)"
+    /// 仅为明确的子 AP / 中继 / Mesh 从节点填写；主网关留空（详情页不展示）。
+    private static func annotateAPRoles(_ networks: inout [WifiNetwork], connectedBSSID: String) {
+        var groups: [String: [Int]] = [:]
+        for (index, net) in networks.enumerated() {
+            groups[net.ssid, default: []].append(index)
         }
-        return ssid
+
+        for (_, indices) in groups {
+            if indices.count == 1 {
+                let i = indices[0]
+                if isSubAPDevice(networks[i], connectedBSSID: connectedBSSID, sameSSIDCount: 1) {
+                    networks[i].apName = subAPDisplayName(for: networks[i])
+                } else {
+                    networks[i].apName = ""
+                }
+                continue
+            }
+            // 同一 SSID 多个 BSSID：已连接的一般为主路径，其余视为子 AP
+            for i in indices {
+                if isSubAPDevice(networks[i], connectedBSSID: connectedBSSID, sameSSIDCount: indices.count) {
+                    networks[i].apName = subAPDisplayName(for: networks[i])
+                } else {
+                    networks[i].apName = ""
+                }
+            }
+        }
+    }
+
+    private static func isSubAPDevice(_ net: WifiNetwork, connectedBSSID: String, sameSSIDCount: Int) -> Bool {
+        if net.isIBSS == true { return true }
+        if isExtenderSSID(net.ssid) { return true }
+        // 同 SSID 多 BSSID：非当前连接的其它接入点视为网关下的子 AP
+        if sameSSIDCount > 1, !net.bssid.isEmpty, !connectedBSSID.isEmpty,
+           net.bssid.caseInsensitiveCompare(connectedBSSID) != .orderedSame {
+            return true
+        }
+        return false
+    }
+
+    private static func isExtenderSSID(_ ssid: String) -> Bool {
+        let lower = ssid.lowercased()
+        let markers = ["_ext", "-ext", ".ext", " ext", "_rpt", "repeater", "extender", "_repeater", "_rp"]
+        return markers.contains { lower.contains($0) }
+    }
+
+    private static func subAPDisplayName(for net: WifiNetwork) -> String {
+        if net.isIBSS == true { return "Ad-hoc (\(net.ssid))" }
+        let vendor = net.routerVendor
+        if vendor != "Unknown vendor", !vendor.isEmpty {
+            return "\(net.ssid) · \(vendor)"
+        }
+        return net.ssid
     }
 
     private static func estimateRates(channel: CWChannel?, phy: String) -> (min: String, basic: String, max: String) {
@@ -115,7 +162,7 @@ enum WifiScanner {
                     security: "", encryptionType: "", phyMode: "",
                     noise: nil, channelWidth: nil, isIBSS: false,
                     isConnected: line.contains("Current Network"),
-                    requiresPassword: true, supportsWPS: false, apName: currentSSID,
+                    requiresPassword: true, supportsWPS: false, apName: "",
                     minRateMbps: "", basicRatesMbps: "", maxRateMbps: "", countryCode: ""
                 ))
             }

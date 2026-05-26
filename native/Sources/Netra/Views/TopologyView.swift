@@ -7,7 +7,6 @@ struct TopologyView: View {
 
     let result: LanScanResult
     @Binding var collapsed: Bool
-    @Binding var selectedSegment: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -44,11 +43,10 @@ struct TopologyView: View {
                 }
                 .frame(maxHeight: 168)
                 .background(AppTheme.glassPanel(cornerRadius: 12, theme: theme))
-
-                segmentFilters
             }
         }
         .onAppear { app.syncPingLoopsForCurrentSection() }
+        .onDisappear { app.syncPingLoopsForCurrentSection() }
     }
 
     private var localMacCard: some View {
@@ -98,31 +96,6 @@ struct TopologyView: View {
             aliases: aliases,
             confirmed: hop?.confirmed ?? true
         )
-    }
-
-    private var segmentFilters: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                filterChip(prefs.l10n(.topologyAllSegments), active: selectedSegment.isEmpty) { selectedSegment = "" }
-                ForEach(result.topology.segments.filter { !$0.cidr.contains("169.254") }) { seg in
-                    filterChip("\(seg.cidr) (\(seg.deviceCount))", active: selectedSegment == seg.cidr) {
-                        selectedSegment = seg.cidr
-                    }
-                }
-            }
-        }
-    }
-
-    private func filterChip(_ title: String, active: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(active ? theme.accent.opacity(0.25) : .white.opacity(0.06), in: Capsule())
-                .overlay(Capsule().stroke(active ? theme.accent : .clear, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
     }
 
     private var connector: some View {
@@ -184,9 +157,9 @@ struct TopologyView: View {
                 LivePingView(
                     samples: pingResolved.samples,
                     stats: pingResolved.stats,
-                    pulse: app.pingPulse
+                    pulse: app.pingPulse,
+                    tick: app.pingTick
                 )
-                .id("\(pingResolved.key)-\(app.pingTick)")
             }
         }
         .frame(minWidth: 152, alignment: .leading)

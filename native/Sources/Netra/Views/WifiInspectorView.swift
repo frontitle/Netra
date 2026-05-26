@@ -82,7 +82,9 @@ struct WifiInspectorView: View {
       WifiParamRow(title: prefs.l10n(.wifiBand), value: net.band, help: nil)
       WifiParamRow(title: prefs.l10n(.wifiSecurity), value: net.security, help: nil)
       WifiParamRow(title: prefs.l10n(.wifiEncryption), value: net.encryptionType, help: nil)
-      WifiParamRow(title: prefs.l10n(.wifiAPName), value: net.apName, help: WifiParamHelp.text("apName", language: lang))
+      if !net.apName.isEmpty {
+        WifiParamRow(title: prefs.l10n(.wifiAPName), value: net.apName, help: WifiParamHelp.text("apName", language: lang))
+      }
       WifiParamRow(title: prefs.l10n(.wifiMinRate), value: net.minRateMbps.isEmpty ? "—" : "\(net.minRateMbps) Mbps", help: nil)
       WifiParamRow(title: prefs.l10n(.wifiBasicRates), value: net.basicRatesMbps.isEmpty ? "—" : "\(net.basicRatesMbps) Mbps", help: nil)
       WifiParamRow(title: prefs.l10n(.wifiMaxRate), value: net.maxRateMbps.isEmpty ? "—" : "\(net.maxRateMbps) Mbps", help: nil)

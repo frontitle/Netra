@@ -19,8 +19,7 @@ struct RadarView: View {
             if let lan = app.lanResult {
                 TopologyView(
                     result: lan,
-                    collapsed: $app.topologyCollapsed,
-                    selectedSegment: $app.segmentFilter
+                    collapsed: $app.topologyCollapsed
                 )
                 .padding(.horizontal, 20)
                 .padding(.bottom, 12)

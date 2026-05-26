@@ -71,8 +71,7 @@ enum LANScanner {
             openPorts.append(contentsOf: PortScanner.scanUDP(ip: ip, ports: IPv4Helpers.udpProbePorts))
             let vendor = OUILookup.vendor(for: mac, hostname: hostname, ports: openPorts)
             let os = DeviceInference.inferOS(ports: openPorts, vendor: vendor, mac: mac)
-            var role = DeviceInference.inferRole(ip: ipStr, localIP: interface.ip, gateway: interface.gateway, vendor: vendor, ports: openPorts, os: os)
-            if role == "Network Device", os != "Unknown" { role = os }
+            let role = DeviceInference.inferRole(ip: ipStr, localIP: interface.ip, gateway: interface.gateway, vendor: vendor, ports: openPorts)
             let device = LanDevice(
                 ip: ipStr,
                 mac: mac,
@@ -120,8 +119,7 @@ enum LANScanner {
                 openPorts.append(contentsOf: PortScanner.scanUDP(ip: ip, ports: IPv4Helpers.udpProbePorts))
                 let vendor = OUILookup.vendor(for: mac, hostname: hostname, ports: openPorts)
                 let os = DeviceInference.inferOS(ports: openPorts, vendor: vendor, mac: mac)
-                var role = DeviceInference.inferRole(ip: ipStr, localIP: interface.ip, gateway: interface.gateway, vendor: vendor, ports: openPorts, os: os)
-                if role == "Network Device", os != "Unknown" { role = os }
+                let role = DeviceInference.inferRole(ip: ipStr, localIP: interface.ip, gateway: interface.gateway, vendor: vendor, ports: openPorts)
                 let device = LanDevice(
                     ip: ipStr, mac: mac, vendor: vendor, hostname: hostname,
                     localDNS: DeviceInference.localDNS(hostname: hostname, ip: ipStr),
@@ -145,6 +143,7 @@ enum LANScanner {
             defaultGateway: interface.gateway,
             devices: devices,
             routeHops: routeHops,
+            gatewayBinding: binding,
             tailscaleRemote: tailscaleRemote
         )
         for i in routerChain.indices { routerChain[i].tier = i }

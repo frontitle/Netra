@@ -48,9 +48,13 @@ final class AppState: ObservableObject {
     @Published var qualityWatch: [String] = []
     @Published var showOfflineDevices = UserDefaults.standard.bool(forKey: "netra.showOfflineDevices")
 
-    private var gatewayPingCancellable: AnyCancellable?
-    private var qualityPingCancellable: AnyCancellable?
+    private var pingLoopTask: Task<Void, Never>?
     private var ouiObserver: NSObjectProtocol?
+
+    private enum PingLoopMode {
+        case gateway
+        case quality
+    }
     private let snapshotsKey = "netra.scanHistory"
 
     var allDevices: [LanDevice] {
@@ -194,16 +198,27 @@ final class AppState: ObservableObject {
     }
 
     func syncPingLoopsForCurrentSection() {
+        stopPingLoop()
+        let mode: PingLoopMode?
         switch section {
-        case .radar:
-            stopQualityPingLoop()
-            startGatewayPingLoop()
+        case .radar where lanResult != nil:
+            mode = .gateway
         case .quality where quality != nil:
-            stopGatewayPingLoop()
-            startQualityPingLoop()
+            mode = .quality
         default:
-            stopGatewayPingLoop()
-            stopQualityPingLoop()
+            mode = nil
+        }
+        guard let mode else { return }
+        pingLoopTask = Task { @MainActor in
+            while !Task.isCancelled {
+                switch mode {
+                case .gateway:
+                    await refreshGatewayPing()
+                case .quality:
+                    await refreshQualityLivePing()
+                }
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
+            }
         }
     }
 
@@ -239,36 +254,9 @@ final class AppState: ObservableObject {
         devices.sort { $0.ip.localizedStandardCompare($1.ip) == .orderedAscending }
     }
 
-    func startGatewayPingLoop() {
-        gatewayPingCancellable?.cancel()
-        guard section == .radar, lanResult != nil else { return }
-        gatewayPingCancellable = Timer.publish(every: 1.2, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                Task { await self?.refreshGatewayPing() }
-            }
-        Task { await refreshGatewayPing() }
-    }
-
-    func stopGatewayPingLoop() {
-        gatewayPingCancellable?.cancel()
-        gatewayPingCancellable = nil
-    }
-
-    func startQualityPingLoop() {
-        qualityPingCancellable?.cancel()
-        guard section == .quality, quality != nil else { return }
-        qualityPingCancellable = Timer.publish(every: 1.2, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                Task { await self?.refreshQualityLivePing() }
-            }
-        Task { await refreshQualityLivePing() }
-    }
-
-    func stopQualityPingLoop() {
-        qualityPingCancellable?.cancel()
-        qualityPingCancellable = nil
+    func stopPingLoop() {
+        pingLoopTask?.cancel()
+        pingLoopTask = nil
     }
 
     func refreshGatewayPing() async {
@@ -284,15 +272,10 @@ final class AppState: ObservableObject {
         }
         guard !targets.isEmpty else { return }
 
-        var pings: [String: PingStats] = [:]
-        await withTaskGroup(of: (String, PingStats).self) { group in
-            for ip in targets {
-                group.addTask { (ip, PingService.stats(target: ip, label: ip, count: 1)) }
-            }
-            for await pair in group {
-                pings[pair.0] = pair.1
-            }
-        }
+        let targetList = Array(targets)
+        let pings = await Task.detached(priority: .userInitiated) {
+            await Self.probePings(targets: targetList)
+        }.value
 
         var nextHistory = pingHistory
         for (ip, stat) in pings {
@@ -315,15 +298,10 @@ final class AppState: ObservableObject {
         report.devices.forEach { targets.insert($0.target) }
         guard !targets.isEmpty else { return }
 
-        var pings: [String: PingStats] = [:]
-        await withTaskGroup(of: (String, PingStats).self) { group in
-            for ip in targets {
-                group.addTask { (ip, PingService.stats(target: ip, label: ip, count: 1)) }
-            }
-            for await pair in group {
-                pings[pair.0] = pair.1
-            }
-        }
+        let targetList = Array(targets)
+        let pings = await Task.detached(priority: .userInitiated) {
+            await Self.probePings(targets: targetList)
+        }.value
 
         var nextHistory = qualityPingHistory
         for (ip, stat) in pings {
@@ -336,6 +314,19 @@ final class AppState: ObservableObject {
         qualityLivePings = pings
         qualityPingPulse.toggle()
         qualityPingTick &+= 1
+    }
+
+    private static func probePings(targets: [String]) async -> [String: PingStats] {
+        var pings: [String: PingStats] = [:]
+        await withTaskGroup(of: (String, PingStats).self) { group in
+            for ip in targets {
+                group.addTask { (ip, PingService.stats(target: ip, label: ip, count: 1)) }
+            }
+            for await pair in group {
+                pings[pair.0] = pair.1
+            }
+        }
+        return pings
     }
 
     private func saveSnapshot(wifi: [WifiNetwork], lan: LanScanResult) {
