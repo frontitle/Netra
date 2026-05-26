@@ -1,35 +1,66 @@
 import Foundation
 
 enum DeviceInference {
-    static func inferRole(ip: String, localIP: String, gateway: String, vendor: String, ports: [OpenPort]) -> String {
-        if ip == gateway { return "网关 / 路由器" }
-        if ports.contains(where: { [80, 443, 8080, 8443].contains($0.port) }) && vendor.lowercased().contains("router") {
-            return "路由器"
+    static func inferRole(ip: String, localIP: String, gateway: String, vendor: String, ports: [OpenPort], os: String) -> String {
+        let portSet = Set(ports.map(\.port))
+        if ip == gateway { return "Gateway / Router" }
+        if portSet.contains(53) && (portSet.contains(67) || portSet.contains(68)) { return "DHCP / DNS Server" }
+        if portSet.contains(445) || portSet.contains(139) { return "Windows / SMB" }
+        if portSet.contains(548) || portSet.contains(7000) || portSet.contains(5000) { return "macOS / Apple" }
+        if portSet.contains(631) || portSet.contains(9100) { return "Printer" }
+        if portSet.contains(554) || portSet.contains(8554) { return "Camera / NVR" }
+        if portSet.contains(502) { return "Industrial (Modbus)" }
+        if portSet.contains(22) && portSet.contains(80) { return "Server" }
+        if portSet.contains(22) { return "SSH Host" }
+        if portSet.contains(80) || portSet.contains(443) || portSet.contains(8080) {
+            if vendor.lowercased().contains("router") || vendor.lowercased().contains("netgear")
+                || vendor.lowercased().contains("tp-link") { return "Router" }
+            return "Web Service"
         }
-        if ports.contains(where: { [445, 139].contains($0.port) }) { return "Windows / SMB 设备" }
-        if ports.contains(where: { $0.port == 22 }) { return "SSH 服务器" }
-        if ports.contains(where: { [5000, 5001, 8080, 8081].contains($0.port) }) { return "NAS / 存储" }
-        return "普通联网设备"
+        if portSet.contains(5000) || portSet.contains(5001) { return "NAS / Storage" }
+        if os.contains("macOS") || os.contains("Apple") { return "Apple Device" }
+        if os.contains("Windows") { return "Windows PC" }
+        if os.contains("Linux") { return "Linux Host" }
+        return "Network Device"
     }
 
     static func inferOS(ports: [OpenPort], vendor: String, mac: String) -> String {
+        let portSet = Set(ports.map(\.port))
         let v = vendor.lowercased()
-        if v.contains("apple") { return "Apple 设备" }
-        if ports.contains(where: { $0.port == 445 }) { return "Windows" }
-        if ports.contains(where: { $0.port == 22 }) { return "Linux / Unix" }
-        return "未知"
+
+        if isAppleVendor(v) {
+            if portSet.contains(548) || portSet.contains(7000) || portSet.contains(5000) || portSet.contains(5900) {
+                return "macOS"
+            }
+            return "Apple (iOS/macOS/tvOS)"
+        }
+        if portSet.contains(445) && (portSet.contains(135) || portSet.contains(139)) { return "Windows" }
+        if portSet.contains(445) { return "Windows" }
+        if portSet.contains(22) && !portSet.contains(445) {
+            if portSet.contains(80) || portSet.contains(443) { return "Linux" }
+            return "Linux / Unix"
+        }
+        if portSet.contains(631) && v.contains("hp") { return "Embedded / Printer" }
+        if v.contains("raspberry") { return "Linux (Raspberry Pi)" }
+        if v.contains("espressif") || v.contains("arduino") { return "Embedded (IoT)" }
+        return "Unknown"
     }
 
     static func hostname(from arp: String?, ip: String) -> String {
         if let arp, !arp.isEmpty, arp != "?" { return arp }
         if let name = dscacheHost(ip: ip) { return name }
-        return "局域网设备"
+        if let name = reverseDNS(ip: ip) { return name }
+        return "host-\(ip.split(separator: ".").last ?? "0")"
     }
 
     static func localDNS(hostname: String, ip: String) -> String {
         if hostname.contains(".") { return hostname }
-        if hostname != "局域网设备" { return "\(hostname).local" }
+        if !hostname.hasPrefix("host-") { return "\(hostname).local" }
         return "\(ip.replacingOccurrences(of: ".", with: "-")).local"
+    }
+
+    private static func isAppleVendor(_ v: String) -> Bool {
+        v.contains("apple") || v.contains("inc.") && v.contains("apple")
     }
 
     private static func dscacheHost(ip: String) -> String? {
@@ -38,6 +69,17 @@ enum DeviceInference {
             let row = String(line).trimmingCharacters(in: .whitespaces)
             if row.hasPrefix("name:") {
                 return row.replacingOccurrences(of: "name:", with: "").trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return nil
+    }
+
+    private static func reverseDNS(ip: String) -> String? {
+        guard let output = ShellRunner.run("/usr/bin/host", [ip]) else { return nil }
+        for line in output.split(separator: "\n") {
+            let row = String(line)
+            if row.contains("domain name pointer") {
+                return row.split(separator: " ").last.map(String.init)?.trimmingCharacters(in: CharacterSet(charactersIn: "."))
             }
         }
         return nil

@@ -7,6 +7,9 @@ final class LocationAuthorizationService: NSObject, ObservableObject {
 
     @Published private(set) var status: CLAuthorizationStatus = .notDetermined
 
+    /// 定位授权成功后调用（用于立即刷新 Wi-Fi 列表）。
+    var onAuthorized: (() -> Void)?
+
     private let manager = CLLocationManager()
 
     static func canScanWifi(status: CLAuthorizationStatus) -> Bool {
@@ -60,7 +63,11 @@ final class LocationAuthorizationService: NSObject, ObservableObject {
 extension LocationAuthorizationService: CLLocationManagerDelegate {
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         DispatchQueue.main.async {
+            let previous = self.status
             self.status = manager.authorizationStatus
+            if !Self.canScanWifi(status: previous), Self.canScanWifi(status: self.status) {
+                self.onAuthorized?()
+            }
         }
     }
 }

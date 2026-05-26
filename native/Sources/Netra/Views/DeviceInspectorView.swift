@@ -5,8 +5,11 @@ struct DeviceInspectorView: View {
     @EnvironmentObject private var prefs: AppPreferences
     @Environment(\.theme) private var theme
     @EnvironmentObject private var app: AppState
+    @ObservedObject private var notes = DeviceNotesStore.shared
 
     let device: LanDevice?
+
+    @State private var aliasDraft = ""
 
     var body: some View {
         Group {
@@ -14,12 +17,15 @@ struct DeviceInspectorView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         header(device)
+                        aliasSection(device)
                         metaGrid(device)
                         portsSection(device)
                         actions(device)
                     }
                     .padding(20)
                 }
+                .onAppear { aliasDraft = notes.alias(for: device.ip) ?? "" }
+                .onChange(of: device.ip) { _ in aliasDraft = notes.alias(for: device.ip) ?? "" }
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "sidebar.right")
@@ -39,15 +45,47 @@ struct DeviceInspectorView: View {
     }
 
     private func header(_ device: LanDevice) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(device.hostname)
-                .font(.system(.title2, design: .rounded).weight(.bold))
+        let display = notes.displayName(discovered: device.hostname, ip: device.ip)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text(display)
+                    .font(.system(.title2, design: .rounded).weight(.bold))
+                if !device.isOnline {
+                    Text(prefs.l10n(.deviceOffline))
+                        .font(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.secondary.opacity(0.2), in: Capsule())
+                }
+            }
+            if display != device.hostname, !device.hostname.isEmpty {
+                Text(String(format: prefs.l10n(.deviceDiscoveredName), device.hostname))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Text(device.ip)
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(theme.accent)
             Text(device.mac)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private func aliasSection(_ device: LanDevice) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(prefs.l10n(.deviceAliasLabel))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                TextField(prefs.l10n(.deviceAliasPlaceholder), text: $aliasDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { notes.setAlias(aliasDraft, for: device.ip) }
+                Button(prefs.l10n(.deviceAliasSave)) {
+                    notes.setAlias(aliasDraft, for: device.ip)
+                }
+                .buttonStyle(FuturisticButtonStyle())
+            }
         }
     }
 
@@ -85,9 +123,11 @@ struct DeviceInspectorView: View {
                             Text(port.hint).font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Button(prefs.l10n(.openInBrowser)) { app.openPort(ip: device.ip, port: port.port) }
-                            .buttonStyle(.borderless)
-                            .foregroundStyle(theme.accent)
+                        if device.isOnline {
+                            Button(prefs.l10n(.openInBrowser)) { app.openPort(ip: device.ip, port: port.port) }
+                                .buttonStyle(.borderless)
+                                .foregroundStyle(theme.accent)
+                        }
                     }
                     .padding(.vertical, 4)
                 }

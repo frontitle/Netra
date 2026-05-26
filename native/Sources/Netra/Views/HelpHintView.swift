@@ -43,6 +43,7 @@ enum WifiParamHelp {
       "phyMode": "PHY 模式表示 Wi-Fi 物理层协议代际（如 802.11ac/ax）。",
       "ibss": "IBSS（Ad-hoc）为设备自组网模式，非常见家庭路由器场景。",
       "routerVendor": "根据 BSSID 前缀 OUI 推断的网卡/设备厂商。",
+      "apName": "子 AP 或扩展接入点的标识名称（SSID + 厂商）。",
     ]
     let en: [String: String] = [
       "bssid": "BSSID is the access point hardware MAC used to identify the router.",
@@ -51,6 +52,7 @@ enum WifiParamHelp {
       "phyMode": "PHY mode indicates the Wi-Fi physical-layer generation (e.g. 802.11ac/ax).",
       "ibss": "IBSS (Ad-hoc) is a peer-to-peer Wi-Fi mode, uncommon on home routers.",
       "routerVendor": "Vendor inferred from the BSSID OUI prefix.",
+      "apName": "Identifier for a mesh node or range extender (SSID + vendor).",
     ]
     let table = language == .zhHans ? zh : en
     return table[key] ?? ""

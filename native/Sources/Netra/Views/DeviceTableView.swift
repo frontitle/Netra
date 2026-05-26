@@ -42,6 +42,7 @@ enum SegmentRowColors {
 
 struct DeviceTableView: NSViewRepresentable {
   @EnvironmentObject private var prefs: AppPreferences
+  @ObservedObject private var notes = DeviceNotesStore.shared
   @Environment(\.colorScheme) private var colorScheme
 
   let devices: [LanDevice]
@@ -92,6 +93,7 @@ struct DeviceTableView: NSViewRepresentable {
 
   func updateNSView(_ scroll: NSScrollView, context: Context) {
     context.coordinator.parent = self
+    context.coordinator.language = prefs.language
     context.coordinator.isDark = colorScheme == .dark
     if let table = context.coordinator.tableView {
       for col in DeviceTableColumn.visibleColumns {
@@ -100,7 +102,8 @@ struct DeviceTableView: NSViewRepresentable {
         }
       }
     }
-    let signature = devices.map { "\($0.ip)|\($0.ports.map(\.port))" }.joined(separator: "\n") + "|\(prefs.language.rawValue)"
+    let signature = devices.map { "\($0.ip)|\($0.isOnline)|\($0.hostname)|\($0.ports.map(\.port))" }.joined(separator: "\n")
+      + "|\(prefs.language.rawValue)|\(notes.revision)"
     guard signature != context.coordinator.lastDeviceSignature else { return }
     context.coordinator.lastDeviceSignature = signature
     context.coordinator.reload()
@@ -111,6 +114,7 @@ struct DeviceTableView: NSViewRepresentable {
     weak var tableView: NSTableView?
     var lastDeviceSignature = ""
     var isDark = true
+    var language: AppLanguage = .en
     private var sorted: [LanDevice] = []
 
     init(_ parent: DeviceTableView) {
@@ -157,7 +161,7 @@ struct DeviceTableView: NSViewRepresentable {
       let textField = NSTextField(labelWithString: value(device, col: col))
       textField.lineBreakMode = .byTruncatingTail
       textField.font = col == .ip || col == .ports ? .monospacedSystemFont(ofSize: 12, weight: .regular) : .systemFont(ofSize: 13)
-      textField.textColor = .labelColor
+      textField.textColor = device.isOnline ? .labelColor : .secondaryLabelColor
       textField.backgroundColor = .clear
       textField.isBordered = false
       return textField
@@ -189,7 +193,10 @@ struct DeviceTableView: NSViewRepresentable {
     private func value(_ device: LanDevice, col: DeviceTableColumn) -> String {
       switch col {
       case .ip: return device.ip
-      case .hostname: return device.hostname
+      case .hostname:
+        let name = DeviceNotesStore.shared.displayName(discovered: device.hostname, ip: device.ip)
+        if device.isOnline { return name }
+        return "\(name) (\(L10n.string(.deviceOffline, language: language)))"
       case .vendor: return device.vendor
       case .role: return device.role
       case .ports:

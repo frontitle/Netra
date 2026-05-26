@@ -16,11 +16,11 @@ struct QualityView: View {
             }
             if let q = app.quality {
                 Text(q.diagnosis).font(.headline)
-                pingCard(prefs.l10n(.qualityGateway), q.gateway)
-                ForEach(q.external) { pingCard($0.label, $0) }
+                livePingCard(prefs.l10n(.qualityGateway), app.liveQualityStats(fallback: q.gateway))
+                ForEach(q.external) { livePingCard($0.label, app.liveQualityStats(fallback: $0)) }
                 if !q.devices.isEmpty {
                     Text(prefs.l10n(.qualityInternalSample)).font(.subheadline).foregroundStyle(.secondary)
-                    ForEach(q.devices) { pingCard($0.target, $0) }
+                    ForEach(q.devices) { livePingCard($0.target, app.liveQualityStats(fallback: $0)) }
                 }
             } else {
                 VStack(spacing: 8) {
@@ -33,17 +33,26 @@ struct QualityView: View {
             Spacer()
         }
         .padding()
+        .onAppear { app.syncPingLoopsForCurrentSection() }
     }
 
-    private func pingCard(_ title: String, _ stats: PingStats) -> some View {
-        HStack {
-            Text(title).frame(width: 120, alignment: .leading)
-            Text("\(Int(stats.avgMs)) ms avg")
-            Spacer()
-            Text("\(Int(stats.packetLoss))% loss")
-                .foregroundStyle(stats.status == .good ? .green : (stats.status == .warning ? .orange : .red))
+    private func livePingCard(_ title: String, _ stats: PingStats) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title).font(.headline)
+                Spacer()
+                Text("\(Int(stats.packetLoss))% loss")
+                    .font(.caption)
+                    .foregroundStyle(stats.status == .good ? .green : (stats.status == .warning ? .orange : .red))
+            }
+            LivePingView(
+                samples: app.qualityPingHistory[stats.target] ?? [],
+                stats: stats,
+                pulse: app.qualityPingPulse
+            )
+            .id("\(stats.target)-\(app.qualityPingTick)")
         }
-        .padding(10)
+        .padding(12)
         .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
     }
 }

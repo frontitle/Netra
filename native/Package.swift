@@ -13,6 +13,7 @@ let package = Package(
             path: "Sources/Netra",
             resources: [
                 .copy("Resources/master_oui.txt"),
+                .copy("Resources/kismet_manuf.txt"),
                 .copy("Resources/AppIcon.png"),
             ],
             linkerSettings: [

@@ -70,9 +70,9 @@ enum LANScanner {
             let hostname = DeviceInference.hostname(from: arp?.hostname, ip: ipStr)
             var openPorts = PortScanner.scanTCP(ip: ip, ports: ports)
             openPorts.append(contentsOf: PortScanner.scanUDP(ip: ip, ports: IPv4Helpers.udpProbePorts))
-            var role = DeviceInference.inferRole(ip: ipStr, localIP: interface.ip, gateway: interface.gateway, vendor: vendor, ports: openPorts)
-            var os = DeviceInference.inferOS(ports: openPorts, vendor: vendor, mac: mac)
-            if role == "普通联网设备", os != "未知" { role = os }
+            let os = DeviceInference.inferOS(ports: openPorts, vendor: vendor, mac: mac)
+            var role = DeviceInference.inferRole(ip: ipStr, localIP: interface.ip, gateway: interface.gateway, vendor: vendor, ports: openPorts, os: os)
+            if role == "Network Device", os != "Unknown" { role = os }
             let device = LanDevice(
                 ip: ipStr,
                 mac: mac,
@@ -127,9 +127,9 @@ enum LANScanner {
                 let hostname = DeviceInference.hostname(from: arp?.hostname, ip: ipStr)
                 var openPorts = PortScanner.scanTCP(ip: ip, ports: ports)
                 openPorts.append(contentsOf: PortScanner.scanUDP(ip: ip, ports: IPv4Helpers.udpProbePorts))
-                var role = DeviceInference.inferRole(ip: ipStr, localIP: interface.ip, gateway: interface.gateway, vendor: vendor, ports: openPorts)
                 let os = DeviceInference.inferOS(ports: openPorts, vendor: vendor, mac: mac)
-                if role == "普通联网设备", os != "未知" { role = os }
+                var role = DeviceInference.inferRole(ip: ipStr, localIP: interface.ip, gateway: interface.gateway, vendor: vendor, ports: openPorts, os: os)
+                if role == "Network Device", os != "Unknown" { role = os }
                 let device = LanDevice(
                     ip: ipStr, mac: mac, vendor: vendor, hostname: hostname,
                     localDNS: DeviceInference.localDNS(hostname: hostname, ip: ipStr),
@@ -178,8 +178,8 @@ enum LANScanner {
         let hostname = DeviceInference.hostname(from: arp?.hostname, ip: ip)
         var openPorts = PortScanner.scanTCP(ip: target, ports: IPv4Helpers.defaultScanPorts)
         openPorts.append(contentsOf: PortScanner.scanUDP(ip: target, ports: IPv4Helpers.udpProbePorts))
-        let role = DeviceInference.inferRole(ip: ip, localIP: interface.ip, gateway: interface.gateway, vendor: vendor, ports: openPorts)
         let os = DeviceInference.inferOS(ports: openPorts, vendor: vendor, mac: mac)
+        let role = DeviceInference.inferRole(ip: ip, localIP: interface.ip, gateway: interface.gateway, vendor: vendor, ports: openPorts, os: os)
         return LanDevice(
             ip: ip,
             mac: mac,

@@ -9,12 +9,21 @@ struct WifiNetwork: Identifiable, Hashable, Codable {
     var band: String
     var signal: String
     var signalPercent: Int
+    var rssi: Int
     var security: String
+    var encryptionType: String
     var phyMode: String
     var noise: String?
     var channelWidth: String?
     var isIBSS: Bool?
     var isConnected: Bool
+    var requiresPassword: Bool
+    var supportsWPS: Bool
+    var apName: String
+    var minRateMbps: String
+    var basicRatesMbps: String
+    var maxRateMbps: String
+    var countryCode: String
 }
 
 struct NetworkInterface: Codable, Hashable {
@@ -43,6 +52,37 @@ struct LanDevice: Identifiable, Hashable, Codable {
     var role: String
     var segment: String
     var ports: [OpenPort]
+    var isOnline: Bool
+
+    init(
+        ip: String, mac: String, vendor: String, hostname: String, localDNS: String,
+        os: String, role: String, segment: String, ports: [OpenPort], isOnline: Bool = true
+    ) {
+        self.ip = ip
+        self.mac = mac
+        self.vendor = vendor
+        self.hostname = hostname
+        self.localDNS = localDNS
+        self.os = os
+        self.role = role
+        self.segment = segment
+        self.ports = ports
+        self.isOnline = isOnline
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        ip = try c.decode(String.self, forKey: .ip)
+        mac = try c.decode(String.self, forKey: .mac)
+        vendor = try c.decode(String.self, forKey: .vendor)
+        hostname = try c.decode(String.self, forKey: .hostname)
+        localDNS = try c.decode(String.self, forKey: .localDNS)
+        os = try c.decode(String.self, forKey: .os)
+        role = try c.decode(String.self, forKey: .role)
+        segment = try c.decode(String.self, forKey: .segment)
+        ports = try c.decodeIfPresent([OpenPort].self, forKey: .ports) ?? []
+        isOnline = try c.decodeIfPresent(Bool.self, forKey: .isOnline) ?? true
+    }
 }
 
 struct TailscaleInfo: Codable, Hashable {

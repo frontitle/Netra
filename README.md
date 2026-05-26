@@ -45,7 +45,7 @@ See [docs/INSTALL.md](docs/INSTALL.md) for details.
 
 ## Versioning & releases
 
-- Marketing version starts at **`0.1.1-beta`**; patch bumps: `0.1.2-beta`, `0.1.3-beta`, …
+- Marketing version: **`0.1.x-beta`** (current **0.1.4-beta**). GitHub Releases keep only the **latest patch** plus milestone **0.x** tags—not every historical `0.1.N-beta`. See [docs/PUBLISHING.md](docs/PUBLISHING.md).
 - In-app **Check for Updates** uses [GitHub Releases](https://github.com/frontitle/Netra/releases) on this repo only
 - See [docs/PUBLISHING.md](docs/PUBLISHING.md) for what to commit vs. exclude
 

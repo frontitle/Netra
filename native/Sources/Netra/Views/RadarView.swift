@@ -20,12 +20,14 @@ struct RadarView: View {
                 TopologyView(
                     result: lan,
                     collapsed: $app.topologyCollapsed,
-                    selectedSegment: $app.segmentFilter,
-                    gatewayPings: app.gatewayPings
+                    selectedSegment: $app.segmentFilter
                 )
                 .padding(.horizontal, 20)
                 .padding(.bottom, 12)
             }
+            offlineToggle
+                .padding(.horizontal, 20)
+                .padding(.bottom, 6)
             filterBar
                 .padding(.horizontal, 20)
                 .padding(.bottom, 8)
@@ -69,6 +71,16 @@ struct RadarView: View {
             .keyboardShortcut("r", modifiers: .command)
             .disabled(false)
         }
+    }
+
+    private var offlineToggle: some View {
+        Toggle(isOn: Binding(
+            get: { app.showOfflineDevices },
+            set: { app.setShowOfflineDevices($0) }
+        )) {
+            Text(prefs.l10n(.showOfflineDevices))
+        }
+        .toggleStyle(.checkbox)
     }
 
     private var filterBar: some View {

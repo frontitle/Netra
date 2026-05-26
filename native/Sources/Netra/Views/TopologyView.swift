@@ -8,7 +8,6 @@ struct TopologyView: View {
     let result: LanScanResult
     @Binding var collapsed: Bool
     @Binding var selectedSegment: String
-    let gatewayPings: [String: PingStats]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -49,8 +48,7 @@ struct TopologyView: View {
                 segmentFilters
             }
         }
-        .onAppear { app.startGatewayPingLoop() }
-        .onDisappear { /* keep loop while on radar */ }
+        .onAppear { app.syncPingLoopsForCurrentSection() }
     }
 
     private var localMacCard: some View {
@@ -94,7 +92,7 @@ struct TopologyView: View {
             title: title,
             subtitle: hop?.segment ?? "",
             ip: ip,
-            ping: gatewayPings[ip],
+            ping: app.gatewayPings[ip],
             style: style,
             aliases: aliases,
             confirmed: hop?.confirmed ?? true
@@ -171,12 +169,13 @@ struct TopologyView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
-            if let ping, style != .internet {
+            if let ping, style != .internet, !ip.isEmpty {
                 LivePingView(
                     samples: app.pingHistory[ip] ?? [],
                     stats: ping,
                     pulse: app.pingPulse
                 )
+                .id("\(ip)-\(app.pingTick)")
             }
         }
         .frame(minWidth: 152, alignment: .leading)

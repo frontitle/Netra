@@ -3,41 +3,99 @@ import Foundation
 
 enum WifiScanner {
     static func scan() -> [WifiNetwork] {
-        if let core = scanCoreWLAN(), !core.isEmpty { return core }
-        return scanSystemProfiler()
+        guard let list = scanCoreWLAN(), !list.isEmpty else {
+            return scanSystemProfiler()
+        }
+        return sortNetworks(list)
     }
 
     private static func scanCoreWLAN() -> [WifiNetwork]? {
         guard let iface = CWWiFiClient.shared().interface() else { return nil }
         do {
             let networks = try iface.scanForNetworks(withSSID: nil, includeHidden: true)
-            let connected = iface.ssid() ?? ""
-            return networks.map { net in
-                let ssid = net.ssid ?? "Hidden Network"
-                let bssid = net.bssid ?? ""
-                let rssi = net.rssiValue
-                let signalScore = (Double(rssi + 90) / 60.0) * 100.0
-                let percent = max(0, min(100, Int(signalScore)))
-                let ch = net.wlanChannel
-                return WifiNetwork(
-                    ssid: ssid,
-                    bssid: bssid,
-                    routerVendor: OUILookup.vendor(for: bssid),
-                    channel: ch.map { String($0.channelNumber) } ?? "",
-                    band: bandLabel(ch?.channelBand),
-                    signal: "\(rssi) dBm",
-                    signalPercent: percent,
-                    security: networkSecurity(net),
-                    phyMode: phyModeLabel(ch),
-                    noise: "\(net.noiseMeasurement) dBm",
-                    channelWidth: channelWidthLabel(ch),
-                    isIBSS: net.ibss,
-                    isConnected: ssid == connected
-                )
-            }.sorted { $0.signalPercent > $1.signalPercent }
+            let connectedSSID = iface.ssid() ?? ""
+            let connectedBSSID = iface.bssid() ?? ""
+            return networks.map { mapNetwork($0, connectedSSID: connectedSSID, connectedBSSID: connectedBSSID) }
         } catch {
             return nil
         }
+    }
+
+    private static func mapNetwork(_ net: CWNetwork, connectedSSID: String, connectedBSSID: String) -> WifiNetwork {
+        let ssid = net.ssid ?? "Hidden Network"
+        let bssid = net.bssid ?? ""
+        let rssi = net.rssiValue
+        let signalScore = (Double(rssi + 90) / 60.0) * 100.0
+        let percent = max(0, min(100, Int(signalScore)))
+        let ch = net.wlanChannel
+        let security = networkSecurity(net)
+        let requiresPassword = !net.supportsSecurity(.none)
+        let isConnected = (!connectedSSID.isEmpty && ssid == connectedSSID)
+            || (!connectedBSSID.isEmpty && bssid.caseInsensitiveCompare(connectedBSSID) == .orderedSame)
+        let apName = inferAPName(ssid: ssid, bssid: bssid, isIBSS: net.ibss)
+        let rates = estimateRates(channel: ch, phy: phyModeLabel(ch))
+        return WifiNetwork(
+            ssid: ssid,
+            bssid: bssid,
+            routerVendor: OUILookup.vendor(for: bssid),
+            channel: ch.map { String($0.channelNumber) } ?? "",
+            band: bandLabel(ch?.channelBand),
+            signal: "\(rssi) dBm",
+            signalPercent: percent,
+            rssi: rssi,
+            security: security,
+            encryptionType: encryptionLabel(net),
+            phyMode: phyModeLabel(ch),
+            noise: "\(net.noiseMeasurement) dBm",
+            channelWidth: channelWidthLabel(ch),
+            isIBSS: net.ibss,
+            isConnected: isConnected,
+            requiresPassword: requiresPassword,
+            supportsWPS: supportsWPS(net),
+            apName: apName,
+            minRateMbps: rates.min,
+            basicRatesMbps: rates.basic,
+            maxRateMbps: rates.max,
+            countryCode: net.countryCode ?? ""
+        )
+    }
+
+    /// 已连接置顶，其余按信号强度降序。
+    static func sortNetworks(_ networks: [WifiNetwork]) -> [WifiNetwork] {
+        networks.sorted { a, b in
+            if a.isConnected != b.isConnected { return a.isConnected }
+            if a.rssi != b.rssi { return a.rssi > b.rssi }
+            return a.ssid.localizedStandardCompare(b.ssid) == .orderedAscending
+        }
+    }
+
+    private static func inferAPName(ssid: String, bssid: String, isIBSS: Bool) -> String {
+        if isIBSS { return "Ad-hoc (\(ssid))" }
+        if bssid.isEmpty { return ssid }
+        let vendor = OUILookup.vendor(for: bssid)
+        if vendor != "Unknown vendor", !ssid.isEmpty {
+            return "\(ssid) · \(vendor)"
+        }
+        return ssid
+    }
+
+    private static func estimateRates(channel: CWChannel?, phy: String) -> (min: String, basic: String, max: String) {
+        guard let channel else { return ("—", "—", "—") }
+        switch channel.channelBand {
+        case .band6GHz:
+            return ("6", "6, 12, 24", "2400")
+        case .band5GHz:
+            return ("6", "6, 12, 24", "866")
+        case .band2GHz:
+            return ("1", "1, 2, 5.5, 11", "144")
+        default:
+            return ("1", "1, 2, 5.5, 11", phy.contains("ax") ? "600" : "300")
+        }
+    }
+
+    private static func supportsWPS(_ net: CWNetwork) -> Bool {
+        if net.supportsSecurity(.none) { return false }
+        return net.supportsSecurity(.wpa2Personal) || net.supportsSecurity(.wpaPersonal)
     }
 
     private static func scanSystemProfiler() -> [WifiNetwork] {
@@ -51,19 +109,14 @@ enum WifiScanner {
             }
             if trimmed.hasPrefix("Channel:"), !currentSSID.isEmpty {
                 results.append(WifiNetwork(
-                    ssid: currentSSID,
-                    bssid: "",
-                    routerVendor: "",
+                    ssid: currentSSID, bssid: "", routerVendor: "",
                     channel: trimmed.replacingOccurrences(of: "Channel:", with: "").trimmingCharacters(in: .whitespaces),
-                    band: "",
-                    signal: "",
-                    signalPercent: 0,
-                    security: "",
-                    phyMode: "",
-                    noise: "",
-                    channelWidth: "",
-                    isIBSS: false,
-                    isConnected: line.contains("Current Network")
+                    band: "", signal: "", signalPercent: 0, rssi: 0,
+                    security: "", encryptionType: "", phyMode: "",
+                    noise: nil, channelWidth: nil, isIBSS: false,
+                    isConnected: line.contains("Current Network"),
+                    requiresPassword: true, supportsWPS: false, apName: currentSSID,
+                    minRateMbps: "", basicRatesMbps: "", maxRateMbps: "", countryCode: ""
                 ))
             }
         }
@@ -81,9 +134,8 @@ enum WifiScanner {
 
     private static func phyModeLabel(_ channel: CWChannel?) -> String {
         guard let channel else { return "" }
-        if #available(macOS 14.0, *) {
-            return channel.channelBand == .band6GHz ? "802.11ax" : "802.11ac/n"
-        }
+        if channel.channelBand == .band6GHz { return "802.11ax" }
+        if channel.channelWidth == .width160MHz || channel.channelWidth == .width80MHz { return "802.11ac" }
         return channel.channelBand == .band2GHz ? "802.11n" : "802.11ac"
     }
 
@@ -96,6 +148,15 @@ enum WifiScanner {
         case .width160MHz: return "160 MHz"
         default: return ""
         }
+    }
+
+    private static func encryptionLabel(_ net: CWNetwork) -> String {
+        if net.supportsSecurity(.wpa3Personal) { return "WPA3" }
+        if net.supportsSecurity(.wpa2Personal) { return "WPA2" }
+        if net.supportsSecurity(.wpaPersonal) { return "WPA" }
+        if net.supportsSecurity(.dynamicWEP) { return "WEP" }
+        if net.supportsSecurity(.none) { return "Open" }
+        return "Encrypted"
     }
 
     private static func networkSecurity(_ net: CWNetwork) -> String {

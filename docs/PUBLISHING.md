@@ -38,15 +38,31 @@
 - `CFBundleVersion`（构建号）每次打包可 +1，用于区分同营销版本的多次构建
 - 根目录 `VERSION` 与 `native/Info.plist` 的 `CFBundleShortVersionString` 应保持一致
 
+### GitHub Release 保留策略（开发期）
+
+开发阶段小版本迭代快，**不在 GitHub 长期保留每一个 `0.1.x-beta`**：
+
+| 保留 | 说明 |
+|------|------|
+| **当前最新** | 例如 `v0.1.4-beta`（始终只有一个最新的 patch） |
+| **里程碑 0.x** | 进入新次版本线时保留的上一个大版本标签（如将来 `v0.2.0-beta` 发布后，可保留 `v0.1.0-beta` 作归档） |
+
+每次发布新 patch 后，删除旧的 `v0.1.N-beta`（N 小于当前）：
+
+```bash
+chmod +x native/scripts/prune-patch-releases.sh
+./native/scripts/prune-patch-releases.sh v0.1.4-beta
+```
+
 ### 发布新版本到 GitHub 时
 
-1. 修改 `native/Info.plist`：`CFBundleShortVersionString`（如 `0.1.2-beta`），必要时 `CFBundleVersion` +1
+1. 修改 `native/Info.plist`：`CFBundleShortVersionString`（如 `0.1.4-beta`），`CFBundleVersion` +1
 2. 同步 `VERSION` 与 `package.json` 的 `version`
 3. 本地执行 `./native/scripts/build-native-macos.sh`
-4. 在 [Releases](https://github.com/frontitle/Netra/releases) 创建 tag，建议命名：**`v0.1.2-beta`**
-5. 上传 `Netra.app.zip` 作为 Release 附件（可选）
+4. 打包 `release/Netra.app` 为 zip，创建 Release 标签 **`v0.1.4-beta`**
+5. 执行 `./native/scripts/prune-patch-releases.sh v0.1.4-beta` 清理过期小版本
 
-应用内 **设置 → 检查更新** 调用 GitHub API `releases/latest`，**仅以该仓库已发布的最新 Release 为准**。仓库为空或尚无 Release 时，不会提示更新。
+应用内 **设置 → 检查更新** 读取 GitHub Releases 列表 API，取**最新已发布**的预发布版本。
 
 ---
 

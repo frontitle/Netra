@@ -31,6 +31,13 @@ final class AppState: ObservableObject {
     @Published var gatewayPings: [String: PingStats] = [:]
     @Published var pingHistory: [String: [Double]] = [:]
     @Published var pingPulse = false
+    @Published var pingTick: UInt = 0
+
+    @Published var qualityLivePings: [String: PingStats] = [:]
+    @Published var qualityPingHistory: [String: [Double]] = [:]
+    @Published var qualityPingPulse = false
+    @Published var qualityPingTick: UInt = 0
+
     @Published var topologyCollapsed = false
     @Published var segmentFilter = ""
     @Published var roleFilter = ""
@@ -42,17 +49,28 @@ final class AppState: ObservableObject {
     @Published var tableSortColumn: DeviceTableColumn = .ip
     @Published var tableSortAscending = true
     @Published var qualityWatch: [String] = []
+    @Published var showOfflineDevices = UserDefaults.standard.bool(forKey: "netra.showOfflineDevices")
 
-    private var pingTimer: Timer?
+    private var gatewayPingCancellable: AnyCancellable?
+    private var qualityPingCancellable: AnyCancellable?
+    private var ouiObserver: NSObjectProtocol?
     private let snapshotsKey = "netra.scanHistory"
 
+    var allDevices: [LanDevice] {
+        guard showOfflineDevices else { return devices }
+        let onlineIPs = Set(devices.map(\.ip))
+        let offline = KnownDevicesStore.shared.offlineDevices(excludingOnline: onlineIPs)
+        return (devices + offline).sorted { $0.ip.localizedStandardCompare($1.ip) == .orderedAscending }
+    }
+
     var filteredDevices: [LanDevice] {
-        devices.filter { device in
+        allDevices.filter { device in
             if !segmentFilter.isEmpty, device.segment != segmentFilter { return false }
             if !roleFilter.isEmpty, !device.role.contains(roleFilter) { return false }
             if !searchText.isEmpty {
                 let q = searchText.lowercased()
-                let hay = [device.ip, device.hostname, device.vendor, device.mac, device.role].joined(separator: " ").lowercased()
+                let alias = DeviceNotesStore.shared.alias(for: device.ip) ?? ""
+                let hay = [device.ip, device.hostname, alias, device.vendor, device.mac, device.role].joined(separator: " ").lowercased()
                 if !hay.contains(q) { return false }
             }
             return true
@@ -75,7 +93,23 @@ final class AppState: ObservableObject {
             topologyCollapsed = raw != "1"
         }
         snapshots = loadSnapshots()
+        OUILookup.startLoading()
+        ouiObserver = NotificationCenter.default.addObserver(
+            forName: .ouiDatabaseDidLoad,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.refreshDeviceVendors() }
+        }
         Task { await runFullScan() }
+    }
+
+    deinit {
+        if let ouiObserver { NotificationCenter.default.removeObserver(ouiObserver) }
+    }
+
+    func liveQualityStats(fallback: PingStats) -> PingStats {
+        qualityLivePings[fallback.target] ?? fallback
     }
 
     func runFullScan() async {
@@ -91,27 +125,25 @@ final class AppState: ObservableObject {
         ScanCancellation.shared.reset()
 
         await Task.detached(priority: .userInitiated) {
-            OUILookup.warmup()
             do {
                 let locStatus = await MainActor.run { LocationAuthorizationService.shared.status }
                 let wifi = LocationAuthorizationService.canScanWifi(status: locStatus) ? WifiScanner.scan() : []
-                var foundCount = 0
-                let lan = try LANScanner.scan { _ in
-                    foundCount += 1
-                    if foundCount == 1 || foundCount % 8 == 0 {
-                        let count = foundCount
-                        Task { @MainActor in self.scanFoundCount = count }
+                let lan = try LANScanner.scan { device in
+                    Task { @MainActor in
+                        self.upsertDevice(device)
+                        self.scanFoundCount = self.devices.count
                     }
                 }
                 await MainActor.run {
                     self.wifiNetworks = wifi
                     self.lanResult = lan
-                    self.devices = lan.devices
+                    KnownDevicesStore.shared.applyScan(lan.devices)
                     self.scanFoundCount = lan.devices.count
                     self.lastScanAt = Self.timeString(Date())
                     self.saveSnapshot(wifi: wifi, lan: lan)
                     self.isScanning = false
-                    self.startGatewayPingLoop()
+                    self.refreshDeviceVendors()
+                    self.syncPingLoopsForCurrentSection()
                 }
             } catch {
                 await MainActor.run {
@@ -136,6 +168,7 @@ final class AppState: ObservableObject {
             let device = try await Task.detached { try LANScanner.scanHost(ip: ip) }.value
             upsertDevice(device)
             selectedDevice = device
+            refreshDeviceVendors()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -146,9 +179,14 @@ final class AppState: ObservableObject {
         defer { qualityLoading = false }
         do {
             let watch = qualityWatch
-            quality = try await Task.detached {
+            let report = try await Task.detached {
                 try QualityService.check(targets: watch.isEmpty ? nil : watch)
             }.value
+            quality = report
+            qualityLivePings = [:]
+            qualityPingHistory = [:]
+            syncPingLoopsForCurrentSection()
+            await refreshQualityLivePing()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -160,27 +198,92 @@ final class AppState: ObservableObject {
         NSWorkspace.shared.open(url)
     }
 
+    func setShowOfflineDevices(_ value: Bool) {
+        showOfflineDevices = value
+        UserDefaults.standard.set(value, forKey: "netra.showOfflineDevices")
+    }
+
+    func refreshWifi() {
+        guard LocationAuthorizationService.canScanWifi(status: LocationAuthorizationService.shared.status) else { return }
+        wifiNetworks = WifiScanner.scan()
+        if selectedWifiID == nil {
+            selectedWifiID = wifiNetworks.first(where: \.isConnected)?.id ?? wifiNetworks.first?.id
+        }
+    }
+
+    func syncPingLoopsForCurrentSection() {
+        switch section {
+        case .radar:
+            stopQualityPingLoop()
+            startGatewayPingLoop()
+        case .quality where quality != nil:
+            stopGatewayPingLoop()
+            startQualityPingLoop()
+        default:
+            stopGatewayPingLoop()
+            stopQualityPingLoop()
+        }
+    }
+
+    func refreshDeviceVendors() {
+        guard OUILookup.ready else { return }
+        var changed = false
+        for i in devices.indices {
+            let mac = devices[i].mac
+            let vendor = OUILookup.vendor(for: mac)
+            if devices[i].vendor != vendor {
+                devices[i].vendor = vendor
+                changed = true
+            }
+        }
+        if changed, let lan = lanResult {
+            var updated = lan
+            updated.devices = devices
+            lanResult = updated
+        }
+    }
+
     private func upsertDevice(_ device: LanDevice) {
-        if let idx = devices.firstIndex(where: { $0.ip == device.ip }) {
-            devices[idx] = device
+        var online = device
+        online.isOnline = true
+        if let idx = devices.firstIndex(where: { $0.ip == online.ip }) {
+            devices[idx] = online
         } else {
-            devices.append(device)
+            devices.append(online)
         }
         devices.sort { $0.ip.localizedStandardCompare($1.ip) == .orderedAscending }
     }
 
     func startGatewayPingLoop() {
-        pingTimer?.invalidate()
-        guard section == .radar else { return }
-        pingTimer = Timer.scheduledTimer(withTimeInterval: 1.2, repeats: true) { [weak self] _ in
-            Task { await self?.refreshGatewayPing() }
-        }
+        gatewayPingCancellable?.cancel()
+        guard section == .radar, lanResult != nil else { return }
+        gatewayPingCancellable = Timer.publish(every: 1.2, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                Task { await self?.refreshGatewayPing() }
+            }
         Task { await refreshGatewayPing() }
     }
 
     func stopGatewayPingLoop() {
-        pingTimer?.invalidate()
-        pingTimer = nil
+        gatewayPingCancellable?.cancel()
+        gatewayPingCancellable = nil
+    }
+
+    func startQualityPingLoop() {
+        qualityPingCancellable?.cancel()
+        guard section == .quality, quality != nil else { return }
+        qualityPingCancellable = Timer.publish(every: 1.2, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                Task { await self?.refreshQualityLivePing() }
+            }
+        Task { await refreshQualityLivePing() }
+    }
+
+    func stopQualityPingLoop() {
+        qualityPingCancellable?.cancel()
+        qualityPingCancellable = nil
     }
 
     func refreshGatewayPing() async {
@@ -193,6 +296,8 @@ final class AppState: ObservableObject {
         if let upstream = lanResult?.topology.gatewayBinding?.upstreamGateway, !upstream.isEmpty {
             targets.insert(upstream)
         }
+        guard !targets.isEmpty else { return }
+
         var pings: [String: PingStats] = [:]
         await withTaskGroup(of: (String, PingStats).self) { group in
             for ip in targets {
@@ -202,14 +307,49 @@ final class AppState: ObservableObject {
                 pings[pair.0] = pair.1
             }
         }
+
+        var nextHistory = pingHistory
         for (ip, stat) in pings {
-            var samples = pingHistory[ip] ?? []
+            var samples = nextHistory[ip] ?? []
             samples.append(stat.avgMs)
             if samples.count > 14 { samples.removeFirst(samples.count - 14) }
-            pingHistory[ip] = samples
+            nextHistory[ip] = samples
         }
+        pingHistory = nextHistory
         gatewayPings = pings
         pingPulse.toggle()
+        pingTick &+= 1
+    }
+
+    func refreshQualityLivePing() async {
+        guard let report = quality else { return }
+        var targets = Set<String>()
+        targets.insert(report.gateway.target)
+        report.external.forEach { targets.insert($0.target) }
+        report.devices.forEach { targets.insert($0.target) }
+        guard !targets.isEmpty else { return }
+
+        var pings: [String: PingStats] = [:]
+        await withTaskGroup(of: (String, PingStats).self) { group in
+            for ip in targets {
+                group.addTask { (ip, PingService.stats(target: ip, label: ip, count: 1)) }
+            }
+            for await pair in group {
+                pings[pair.0] = pair.1
+            }
+        }
+
+        var nextHistory = qualityPingHistory
+        for (ip, stat) in pings {
+            var samples = nextHistory[ip] ?? []
+            samples.append(stat.avgMs)
+            if samples.count > 14 { samples.removeFirst(samples.count - 14) }
+            nextHistory[ip] = samples
+        }
+        qualityPingHistory = nextHistory
+        qualityLivePings = pings
+        qualityPingPulse.toggle()
+        qualityPingTick &+= 1
     }
 
     private func saveSnapshot(wifi: [WifiNetwork], lan: LanScanResult) {

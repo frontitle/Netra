@@ -96,6 +96,25 @@ enum L10nKey: String, CaseIterable {
     case routerConfirmed
     case routerUnconfirmed
     case pingLive
+    case showOfflineDevices
+    case deviceOffline
+    case deviceAliasLabel
+    case deviceAliasPlaceholder
+    case deviceAliasSave
+    case deviceDiscoveredName
+    case wifiConnected
+    case wifiHasPassword
+    case wifiOpenNetwork
+    case wifiSupportsWPS
+    case wifiEncryption
+    case wifiAPName
+    case wifiMinRate
+    case wifiBasicRates
+    case wifiMaxRate
+    case wifiCountry
+    case copyBSSID
+    case yes
+    case no
 }
 
 enum L10n {
@@ -204,6 +223,25 @@ enum L10n {
         .routerConfirmed: "已确认",
         .routerUnconfirmed: "待确认",
         .pingLive: "实时",
+        .showOfflineDevices: "显示离线的设备",
+        .deviceOffline: "离线",
+        .deviceAliasLabel: "备注名称",
+        .deviceAliasPlaceholder: "自定义显示名称…",
+        .deviceAliasSave: "保存",
+        .deviceDiscoveredName: "发现名称：%@",
+        .wifiConnected: "已连接",
+        .wifiHasPassword: "需要密码",
+        .wifiOpenNetwork: "开放网络",
+        .wifiSupportsWPS: "支持 WPS",
+        .wifiEncryption: "加密类型",
+        .wifiAPName: "AP 名称",
+        .wifiMinRate: "最低速率",
+        .wifiBasicRates: "基础速率",
+        .wifiMaxRate: "最高速率",
+        .wifiCountry: "国家/地区",
+        .copyBSSID: "复制 BSSID",
+        .yes: "是",
+        .no: "否",
     ]
 
     private static let en: [L10nKey: String] = [
@@ -302,5 +340,24 @@ enum L10n {
         .routerConfirmed: "Confirmed",
         .routerUnconfirmed: "Unverified",
         .pingLive: "Live",
+        .showOfflineDevices: "Show offline devices",
+        .deviceOffline: "Offline",
+        .deviceAliasLabel: "Display name",
+        .deviceAliasPlaceholder: "Custom label…",
+        .deviceAliasSave: "Save",
+        .deviceDiscoveredName: "Discovered: %@",
+        .wifiConnected: "Connected",
+        .wifiHasPassword: "Password required",
+        .wifiOpenNetwork: "Open network",
+        .wifiSupportsWPS: "WPS supported",
+        .wifiEncryption: "Encryption",
+        .wifiAPName: "AP name",
+        .wifiMinRate: "Min rate",
+        .wifiBasicRates: "Basic rates",
+        .wifiMaxRate: "Max rate",
+        .wifiCountry: "Country",
+        .copyBSSID: "Copy BSSID",
+        .yes: "Yes",
+        .no: "No",
     ]
 }

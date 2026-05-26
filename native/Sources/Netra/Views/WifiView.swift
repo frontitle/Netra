@@ -10,8 +10,9 @@ struct WifiView: View {
       HStack {
         Text(prefs.l10n(.wifiTitle)).font(.system(.title, design: .rounded).weight(.bold))
         Spacer()
-        Button(prefs.l10n(.wifiRefresh)) { scanWifi() }
+        Button(prefs.l10n(.wifiRefresh)) { app.refreshWifi() }
           .buttonStyle(FuturisticButtonStyle())
+          .disabled(!location.canScanWifi)
       }
       .padding(.horizontal, 20)
       .padding(.top, 16)
@@ -22,14 +23,26 @@ struct WifiView: View {
       }
 
       List(app.wifiNetworks, selection: $app.selectedWifiID) { net in
-        HStack {
+        HStack(spacing: 10) {
+          Image(systemName: net.isConnected ? "wifi" : "wifi.circle")
+            .foregroundStyle(net.isConnected ? .green : WifiSignalStyle.color(percent: net.signalPercent))
           VStack(alignment: .leading, spacing: 2) {
-            Text(net.ssid).fontWeight(net.isConnected ? .bold : .regular)
-            Text(net.bssid).font(.caption.monospaced()).foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+              Text(net.ssid).fontWeight(net.isConnected ? .bold : .regular)
+              if net.isConnected {
+                Text(prefs.l10n(.wifiConnected))
+                  .font(.caption2)
+                  .foregroundStyle(.green)
+              }
+            }
+            if !net.bssid.isEmpty {
+              Text(net.bssid).font(.caption.monospaced()).foregroundStyle(.secondary)
+            }
           }
           Spacer()
           Text("\(net.signalPercent)%")
-            .font(.caption.monospacedDigit())
+            .font(.caption.monospacedDigit().weight(.semibold))
+            .foregroundStyle(WifiSignalStyle.color(percent: net.signalPercent))
         }
         .tag(net.id)
       }
@@ -38,9 +51,17 @@ struct WifiView: View {
     .padding(.horizontal, 12)
     .padding(.bottom, 12)
     .onAppear {
+      location.onAuthorized = { app.refreshWifi() }
       location.refreshStatus()
       if location.status == .notDetermined {
         location.requestAuthorization()
+      } else if location.canScanWifi {
+        app.refreshWifi()
+      }
+    }
+    .onChange(of: location.status) { status in
+      if LocationAuthorizationService.canScanWifi(status: status) {
+        app.refreshWifi()
       }
     }
   }
@@ -63,19 +84,15 @@ struct WifiView: View {
     .padding(14)
     .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
   }
+}
 
-  private func scanWifi() {
-    guard location.canScanWifi else {
-      if location.status == .notDetermined {
-        location.requestAuthorization()
-      } else {
-        location.openSystemLocationSettings()
-      }
-      return
-    }
-    app.wifiNetworks = WifiScanner.scan()
-    if app.selectedWifiID == nil {
-      app.selectedWifiID = app.wifiNetworks.first?.id
+enum WifiSignalStyle {
+  static func color(percent: Int) -> Color {
+    switch percent {
+    case 70...: return .green
+    case 45..<70: return .yellow
+    case 25..<45: return .orange
+    default: return .red
     }
   }
 }

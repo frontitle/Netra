@@ -20,16 +20,12 @@ struct ContentView: View {
         }
         .environment(\.theme, prefs.themeColors)
         .preferredColorScheme(prefs.preferredColorScheme)
-        .onChange(of: app.section) { section in
-            if section == .radar {
-                app.startGatewayPingLoop()
-            } else {
-                app.stopGatewayPingLoop()
-            }
-            if section != .wifi {
+        .onChange(of: app.section) { _ in
+            app.syncPingLoopsForCurrentSection()
+            if app.section != .wifi {
                 app.selectedWifiID = nil
             }
-            if section != .radar {
+            if app.section != .radar {
                 app.selectedDevice = nil
             }
         }
@@ -63,13 +59,8 @@ struct ContentView: View {
         .safeAreaInset(edge: .top) {
             HStack(spacing: 10) {
                 NetraLogo(size: 32)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(Brand.productName)
-                        .font(.system(.title3, design: .rounded).weight(.bold))
-                    Text(prefs.l10n(.appTagline))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                Text(Brand.productName)
+                    .font(.system(.title3, design: .rounded).weight(.bold))
                 Spacer()
             }
             .padding(.horizontal, 16)
