@@ -1,0 +1,25 @@
+.DS_Store
+Thumbs.db
+
+# 本地构建产物（不要提交）
+release/
+native/.build/
+*.dSYM
+
+# IDE / 编辑器
+*.xcuserstate
+*.xcodeproj/xcuserdata/
+.cursor/
+.idea/
+*.swp
+*~
+
+# 密钥与本地配置
+.env
+.env.*
+*.pem
+credentials.json
+secrets/
+
+# 误生成的中间 App 包
+native/.build/*.app/

@@ -1,0 +1,11 @@
+{
+  "name": "netra",
+  "version": "0.1.1-beta",
+  "private": true,
+  "description": "Netra — native macOS LAN scanner",
+  "scripts": {
+    "package": "bash native/scripts/build-native-macos.sh",
+    "build": "bash native/scripts/build-native-macos.sh",
+    "run": "cd native && swift run"
+  }
+}
