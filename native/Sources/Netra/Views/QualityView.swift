@@ -3,51 +3,130 @@ import SwiftUI
 struct QualityView: View {
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var prefs: AppPreferences
+    @Environment(\.theme) private var theme
+
+    private let lanColumns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+    private let wanColumns = [
+        GridItem(.flexible(), spacing: 10),
+        GridItem(.flexible(), spacing: 10),
+        GridItem(.flexible(), spacing: 10),
+    ]
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                 HStack {
                     Text(prefs.l10n(.qualityTitle)).font(.largeTitle.bold())
                     Spacer()
                     Button(app.qualityLoading ? prefs.l10n(.qualityRunning) : prefs.l10n(.qualityStart)) {
                         Task { await app.runQualityCheck() }
                     }
+                    .buttonStyle(FuturisticButtonStyle(prominent: true))
                     .disabled(app.qualityLoading)
                 }
+
                 if let q = app.quality {
-                    Text(q.diagnosis).font(.headline)
-                    livePingCard(prefs.l10n(.qualityGateway), app.liveQualityStats(fallback: q.gateway))
-                    ForEach(q.external) { livePingCard($0.label, app.liveQualityStats(fallback: $0)) }
+                    Text(q.diagnosis)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+
+                    sectionLabel(prefs.l10n(.qualityGateway))
+                    pingCard(
+                        title: displayLabel(for: q.gateway),
+                        subtitle: q.gateway.target,
+                        stats: app.liveQualityStats(fallback: q.gateway),
+                        prominent: true
+                    )
+
+                    sectionLabel("Internet")
+                    LazyVGrid(columns: wanColumns, spacing: 10) {
+                        ForEach(q.external) { target in
+                            pingCard(
+                                title: target.label,
+                                subtitle: target.target,
+                                stats: app.liveQualityStats(fallback: target),
+                                prominent: false
+                            )
+                        }
+                    }
+
                     if !q.devices.isEmpty {
-                        Text(prefs.l10n(.qualityInternalSample)).font(.subheadline).foregroundStyle(.secondary)
-                        ForEach(q.devices) { livePingCard($0.target, app.liveQualityStats(fallback: $0)) }
+                        sectionLabel(prefs.l10n(.qualityInternalSample))
+                        LazyVGrid(columns: lanColumns, spacing: 10) {
+                            ForEach(q.devices) { target in
+                                pingCard(
+                                    title: displayLabel(for: target),
+                                    subtitle: target.target,
+                                    stats: app.liveQualityStats(fallback: target),
+                                    prominent: false
+                                )
+                            }
+                        }
                     }
                 } else {
-                    VStack(spacing: 8) {
-                        Image(systemName: "waveform.path.ecg").font(.largeTitle).foregroundStyle(.secondary)
+                    VStack(spacing: 10) {
+                        Image(systemName: "waveform.path.ecg")
+                            .font(.system(size: 40))
+                            .foregroundStyle(theme.accent.opacity(0.5))
                         Text(prefs.l10n(.qualityNotRun)).font(.headline)
-                        Text(prefs.l10n(.qualityHint)).font(.callout).foregroundStyle(.secondary)
+                        Text(prefs.l10n(.qualityHint))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 40)
+                    .padding(.vertical, 48)
                 }
             }
             .padding(20)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .onAppear { app.syncPingLoopsForCurrentSection() }
         .onDisappear { app.syncPingLoopsForCurrentSection() }
     }
 
-    private func livePingCard(_ title: String, _ stats: PingStats) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(title).font(.headline)
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .textCase(.uppercase)
+    }
+
+    private func displayLabel(for stats: PingStats) -> String {
+        if let device = app.devices.first(where: { $0.ip == stats.target }),
+           device.hostname != "—", !device.hostname.isEmpty {
+            return device.hostname
+        }
+        return stats.label == stats.target ? stats.target : stats.label
+    }
+
+    private func pingCard(title: String, subtitle: String, stats: PingStats, prominent: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(prominent ? .subheadline.weight(.semibold) : .caption.weight(.semibold))
+                        .lineLimit(1)
+                    Text(subtitle)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                statusDot(stats.status)
+            }
+            HStack(alignment: .lastTextBaseline, spacing: 4) {
+                Text("\(Int(stats.avgMs))")
+                    .font(.system(prominent ? .title3 : .body, design: .rounded).weight(.bold).monospacedDigit())
+                Text("ms")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
                 Spacer()
-                Text("\(Int(stats.packetLoss))% loss")
-                    .font(.caption)
-                    .foregroundStyle(stats.status == .good ? .green : (stats.status == .warning ? .orange : .red))
+                Text("\(Int(stats.packetLoss))%")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(lossColor(stats.status))
             }
             LivePingView(
                 samples: app.qualityPingHistory[stats.target] ?? [],
@@ -56,7 +135,29 @@ struct QualityView: View {
                 tick: app.qualityPingTick
             )
         }
-        .padding(12)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+        .padding(prominent ? 14 : 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            prominent ? theme.accent.opacity(0.08) : Color.white.opacity(0.05),
+            in: RoundedRectangle(cornerRadius: 12)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(prominent ? theme.accent.opacity(0.35) : Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private func statusDot(_ status: PingQuality) -> some View {
+        Circle()
+            .fill(lossColor(status))
+            .frame(width: 8, height: 8)
+    }
+
+    private func lossColor(_ status: PingQuality) -> Color {
+        switch status {
+        case .good: return .green
+        case .warning: return .orange
+        case .bad, .down: return .red
+        }
     }
 }

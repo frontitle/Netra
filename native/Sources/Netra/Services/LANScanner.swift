@@ -57,6 +57,14 @@ enum LANScanner {
         routeGateways.forEach { ips.insert($0) }
         routeHops.forEach { ips.insert($0) }
 
+        let hostIPs = ips.filter { IPv4Helpers.isValidHost($0) }.map { IPv4Helpers.ipv4String($0) }
+        var arpHints: [String: String] = [:]
+        for (addr, entry) in arpEntries {
+            let ipStr = IPv4Helpers.ipv4String(addr)
+            if let h = entry.hostname { arpHints[ipStr] = h }
+        }
+        let resolvedNames = HostnameResolver.resolveBatch(ips: hostIPs, arpHints: arpHints)
+
         var devices: [LanDevice] = []
         let ports = IPv4Helpers.defaultScanPorts
         for ip in ips.sorted(by: { IPv4Helpers.ipv4ToUInt32($0) < IPv4Helpers.ipv4ToUInt32($1) }) {
@@ -66,7 +74,8 @@ enum LANScanner {
             let arp = arpEntries[ip]
             let mac = arp?.mac ?? "未知"
             if IPv4Helpers.isIgnoredMAC(mac), arp == nil { continue }
-            let hostname = DeviceInference.hostname(from: arp?.hostname, ip: ipStr)
+            let hostname = resolvedNames[ipStr]
+                ?? DeviceInference.hostname(from: arp?.hostname, ip: ipStr)
             var openPorts = PortScanner.scanTCP(ip: ip, ports: ports)
             openPorts.append(contentsOf: PortScanner.scanUDP(ip: ip, ports: IPv4Helpers.udpProbePorts))
             let vendor = OUILookup.vendor(for: mac, hostname: hostname, ports: openPorts)
@@ -148,6 +157,7 @@ enum LANScanner {
         )
         for i in routerChain.indices { routerChain[i].tier = i }
         applyGatewayRoles(&devices, binding: binding, routerChain: routerChain)
+        enrichUnresolvedHostnames(&devices)
         let dualHomed = discoverDualHomed(devices: devices, hostInterfaces: hostInterfaces)
         var localIPs = NetworkInterfaceService.collectLocalIPs(primary: interface, interfaces: hostInterfaces)
         if let ts = tailscale, !ts.ipv4.isEmpty, !localIPs.contains(ts.ipv4) { localIPs.append(ts.ipv4) }
@@ -171,6 +181,17 @@ enum LANScanner {
             topology: topology,
             tailscale: tailscale
         )
+    }
+
+    private static func enrichUnresolvedHostnames(_ devices: inout [LanDevice]) {
+        let unresolved = devices.filter { $0.hostname == "—" }.map(\.ip)
+        guard !unresolved.isEmpty else { return }
+        let names = HostnameResolver.resolveBatch(ips: unresolved)
+        for i in devices.indices {
+            guard let name = names[devices[i].ip] else { continue }
+            devices[i].hostname = name
+            devices[i].localDNS = DeviceInference.localDNS(hostname: name, ip: devices[i].ip)
+        }
     }
 
     private static func discoverCandidateSegments(

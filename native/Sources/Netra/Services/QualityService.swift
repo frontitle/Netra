@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 enum QualityService {
     static func check(targets: [String]? = nil) throws -> QualityReport {
@@ -10,7 +11,13 @@ enum QualityService {
         if deviceTargets.isEmpty {
             deviceTargets = arp.keys.prefix(8).map { IPv4Helpers.ipv4String($0) }
         }
-        let devices = deviceTargets.map { PingService.stats(target: $0, label: $0) }
+        PingService.sweep(deviceTargets)
+        Thread.sleep(forTimeInterval: 0.08)
+        let nameMap = HostnameResolver.resolveBatch(ips: deviceTargets, arpHints: arpHints(from: arp))
+        let devices = deviceTargets.map { ip in
+            let label = nameMap[ip] ?? ip
+            return PingService.stats(target: ip, label: label)
+        }
         let bad = devices.filter { $0.status == .bad || $0.status == .down }
         let diagnosis: String
         if gateway.status == .down {
@@ -28,5 +35,13 @@ enum QualityService {
             diagnosis: diagnosis,
             suspects: bad.map(\.target)
         )
+    }
+
+    private static func arpHints(from arp: [IPv4Address: ArpEntry]) -> [String: String] {
+        var hints: [String: String] = [:]
+        for (addr, entry) in arp {
+            if let h = entry.hostname { hints[IPv4Helpers.ipv4String(addr)] = h }
+        }
+        return hints
     }
 }
