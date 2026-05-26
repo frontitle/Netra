@@ -15,4 +15,8 @@ enum AppConfig {
     static var releasesPageURL: URL {
         URL(string: "https://github.com/\(githubOwner)/\(githubRepo)/releases")!
     }
+
+    static var releasesAPI: URL {
+        URL(string: "https://api.github.com/repos/\(githubOwner)/\(githubRepo)/releases?per_page=8")!
+    }
 }
