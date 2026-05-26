@@ -4,11 +4,11 @@ extension Notification.Name {
     static let ouiDatabaseDidLoad = Notification.Name("netra.ouiDatabaseDidLoad")
 }
 
-/// 厂商识别 — 基于 [OUI-Master-Database](https://github.com/Ringmast4r/OUI-Master-Database)（后台异步加载）。
+/// 厂商识别 — OUI-Master-Database；先加载 master（快速可用），再后台合并 kismet。
 enum OUILookup {
     private final class Store: @unchecked Sendable {
         private let lock = NSLock()
-        var prefixes: [(String, String)] = []
+        var prefixMap: [String: String] = [:]
         var isReady = false
         var loadStarted = false
 
@@ -20,28 +20,40 @@ enum OUILookup {
             return true
         }
 
-        func install(_ table: [(String, String)]) {
+        func install(_ table: [String: String], merge: Bool) {
             lock.lock()
-            prefixes = table
+            if merge {
+                for (k, v) in table where prefixMap[k] == nil {
+                    prefixMap[k] = v
+                }
+            } else {
+                prefixMap = table
+            }
             isReady = true
             lock.unlock()
         }
 
-        func snapshot() -> (ready: Bool, list: [(String, String)]) {
+        func snapshot() -> (ready: Bool, map: [String: String]) {
             lock.lock()
             defer { lock.unlock() }
-            return (isReady, prefixes)
+            return (isReady, prefixMap)
         }
     }
 
     private static let store = Store()
 
-    /// 应用启动时调用；加载在后台线程完成，不阻塞扫描。
     static func startLoading() {
         guard store.beginLoadIfNeeded() else { return }
         Task.detached(priority: .utility) {
-            let loaded = buildPrefixTable()
-            store.install(loaded)
+            var master: [String: String] = [:]
+            loadResource("master_oui", into: &master)
+            store.install(master, merge: false)
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .ouiDatabaseDidLoad, object: nil)
+            }
+            var kismet: [String: String] = [:]
+            loadResource("kismet_manuf", into: &kismet)
+            store.install(kismet, merge: true)
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .ouiDatabaseDidLoad, object: nil)
             }
@@ -52,27 +64,63 @@ enum OUILookup {
         store.snapshot().ready
     }
 
-    static func vendor(for mac: String) -> String {
-        let normalized = IPv4Helpers.normalizeMAC(mac).replacingOccurrences(of: ":", with: "").uppercased()
-        guard normalized.count >= 6, normalized != "未知" else { return unknownLabel() }
-
-        let (ready, list) = store.snapshot()
-
-        guard ready, !list.isEmpty else { return unknownLabel() }
-
-        for length in [9, 7, 6] {
-            guard normalized.count >= length else { continue }
-            let prefix = String(normalized.prefix(length))
-            if let name = list.first(where: { $0.0 == prefix })?.1 { return name }
+    static func vendor(for mac: String, hostname: String = "", ports: [OpenPort] = []) -> String {
+        let normalized = macKey(mac)
+        guard normalized.count >= 6, normalized != "未知" else {
+            return inferVendorFallback(mac: mac, hostname: hostname, ports: ports) ?? unknownLabel()
         }
-        return unknownLabel()
+
+        let (ready, map) = store.snapshot()
+        if ready, !map.isEmpty {
+            for length in [9, 7, 6] {
+                guard normalized.count >= length else { continue }
+                let key = String(normalized.prefix(length))
+                if let name = map[key] {
+                    let lower = name.lowercased()
+                    if lower != "private", !lower.hasPrefix("randomized") {
+                        return name
+                    }
+                }
+            }
+        }
+
+        return inferVendorFallback(mac: mac, hostname: hostname, ports: ports) ?? unknownLabel()
     }
 
-    private static func buildPrefixTable() -> [(String, String)] {
-        var map: [String: String] = [:]
-        loadResource("master_oui", into: &map)
-        loadResource("kismet_manuf", into: &map)
-        return map.map { ($0.key, $0.value) }.sorted { $0.0.count > $1.0.count }
+    /// Apple 等设备常用随机/私有 MAC，需结合主机名与端口回退。
+    private static func inferVendorFallback(mac: String, hostname: String, ports: [OpenPort]) -> String? {
+        let h = hostname.lowercased()
+        let portSet = Set(ports.map(\.port))
+        if isAppleHostname(h) || isApplePortSignature(portSet) {
+            return "Apple, Inc."
+        }
+        if h.contains("iphone") || h.contains("ipad") || h.contains("macbook") || h.contains("imac")
+            || h.contains("appletv") || h.contains("airpods") || h.contains("homepod") {
+            return "Apple, Inc."
+        }
+        if isLocallyAdministeredMAC(mac), portSet.contains(5353) || portSet.contains(7000) || portSet.contains(5000) {
+            return "Apple, Inc."
+        }
+        return nil
+    }
+
+    private static func isAppleHostname(_ h: String) -> Bool {
+        h.contains("apple") || h.contains("iphone") || h.contains("ipad") || h.contains("macbook")
+            || h.contains("imac") || h.contains("appletv") || h.hasSuffix(".local") && (h.contains("mac") || h.contains("iphone"))
+    }
+
+    private static func isApplePortSignature(_ ports: Set<Int>) -> Bool {
+        ports.contains(7000) || ports.contains(5000) || ports.contains(548) || ports.contains(5900) || ports.contains(62078)
+    }
+
+    private static func isLocallyAdministeredMAC(_ mac: String) -> Bool {
+        let norm = IPv4Helpers.normalizeMAC(mac)
+        guard let first = norm.split(separator: ":").first, let byte = UInt8(first, radix: 16) else { return false }
+        return (byte & 0x02) != 0
+    }
+
+    private static func macKey(_ mac: String) -> String {
+        IPv4Helpers.normalizeMAC(mac).replacingOccurrences(of: ":", with: "").uppercased()
     }
 
     private static func loadResource(_ name: String, into map: inout [String: String]) {
@@ -86,6 +134,8 @@ enum OUILookup {
                 parts = row.split(separator: "\t", maxSplits: 1).map(String.init)
             } else if row.contains(",") {
                 parts = row.split(separator: ",", maxSplits: 1).map(String.init)
+            } else if row.contains("  ") {
+                parts = row.split(separator: "  ", maxSplits: 1).map(String.init)
             } else { continue }
             guard parts.count >= 2 else { continue }
             let key = normalizeOUIKey(parts[0])

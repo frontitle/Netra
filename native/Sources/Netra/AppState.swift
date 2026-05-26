@@ -43,9 +43,6 @@ final class AppState: ObservableObject {
     @Published var roleFilter = ""
     @Published var searchText = ""
     @Published var selectedDevice: LanDevice?
-    @Published var singleScanIP = ""
-    @Published var singleScanLoading = false
-
     @Published var tableSortColumn: DeviceTableColumn = .ip
     @Published var tableSortAscending = true
     @Published var qualityWatch: [String] = []
@@ -159,21 +156,6 @@ final class AppState: ObservableObject {
         isScanning = false
     }
 
-    func scanSingleIP() async {
-        let ip = singleScanIP.trimmingCharacters(in: .whitespaces)
-        guard !ip.isEmpty else { return }
-        singleScanLoading = true
-        defer { singleScanLoading = false }
-        do {
-            let device = try await Task.detached { try LANScanner.scanHost(ip: ip) }.value
-            upsertDevice(device)
-            selectedDevice = device
-            refreshDeviceVendors()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
     func runQualityCheck() async {
         qualityLoading = true
         defer { qualityLoading = false }
@@ -230,9 +212,12 @@ final class AppState: ObservableObject {
         var changed = false
         for i in devices.indices {
             let mac = devices[i].mac
-            let vendor = OUILookup.vendor(for: mac)
-            if devices[i].vendor != vendor {
+            let d = devices[i]
+            let vendor = OUILookup.vendor(for: mac, hostname: d.hostname, ports: d.ports)
+            if d.vendor != vendor {
                 devices[i].vendor = vendor
+                let os = DeviceInference.inferOS(ports: d.ports, vendor: vendor, mac: mac)
+                devices[i].os = os
                 changed = true
             }
         }
@@ -290,11 +275,12 @@ final class AppState: ObservableObject {
         var targets = Set<String>()
         if let gw = lanResult?.interface.gateway, gw != "未知" { targets.insert(gw) }
         for hop in lanResult?.topology.routerChain ?? [] {
-            targets.insert(hop.ip)
-            hop.aliasIPs.forEach { targets.insert($0) }
+            if !hop.ip.isEmpty { targets.insert(hop.ip) }
+            hop.aliasIPs.forEach { if !$0.isEmpty { targets.insert($0) } }
         }
-        if let upstream = lanResult?.topology.gatewayBinding?.upstreamGateway, !upstream.isEmpty {
-            targets.insert(upstream)
+        if let binding = lanResult?.topology.gatewayBinding {
+            if !binding.upstreamGateway.isEmpty { targets.insert(binding.upstreamGateway) }
+            binding.aliasIPs.forEach { if !$0.isEmpty { targets.insert($0) } }
         }
         guard !targets.isEmpty else { return }
 

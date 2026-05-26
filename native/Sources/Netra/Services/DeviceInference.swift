@@ -46,10 +46,13 @@ enum DeviceInference {
         return "Unknown"
     }
 
+    /// 综合 ARP、mDNS 缓存、反向 DNS、SMB 等解析可读的设备名。
     static func hostname(from arp: String?, ip: String) -> String {
-        if let arp, !arp.isEmpty, arp != "?" { return arp }
-        if let name = dscacheHost(ip: ip) { return name }
-        if let name = reverseDNS(ip: ip) { return name }
+        if let arp = sanitizeHostname(arp), !arp.isEmpty { return arp }
+        if let name = dscacheHost(ip: ip) { return sanitizeHostname(name) ?? name }
+        if let name = reverseDNS(ip: ip) { return sanitizeHostname(name) ?? name }
+        if let name = smbutilName(ip: ip) { return sanitizeHostname(name) ?? name }
+        if let name = refreshedARPName(ip: ip) { return name }
         return "host-\(ip.split(separator: ".").last ?? "0")"
     }
 
@@ -59,8 +62,24 @@ enum DeviceInference {
         return "\(ip.replacingOccurrences(of: ".", with: "-")).local"
     }
 
+    private static func sanitizeHostname(_ raw: String?) -> String? {
+        guard var name = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return nil }
+        if name == "?" || name == "(null)" { return nil }
+        if name.hasSuffix(".") { name.removeLast() }
+        if name.contains("\\") {
+            name = name.split(separator: "\\").last.map(String.init) ?? name
+        }
+        return name.isEmpty ? nil : name
+    }
+
+    private static func refreshedARPName(ip: String) -> String? {
+        guard let addr = IPv4Helpers.parseIPv4(ip) else { return nil }
+        guard let entry = ARPService.readAll()[addr] else { return nil }
+        return sanitizeHostname(entry.hostname)
+    }
+
     private static func isAppleVendor(_ v: String) -> Bool {
-        v.contains("apple") || v.contains("inc.") && v.contains("apple")
+        v.contains("apple")
     }
 
     private static func dscacheHost(ip: String) -> String? {
@@ -80,6 +99,17 @@ enum DeviceInference {
             let row = String(line)
             if row.contains("domain name pointer") {
                 return row.split(separator: " ").last.map(String.init)?.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            }
+        }
+        return nil
+    }
+
+    private static func smbutilName(ip: String) -> String? {
+        guard let output = ShellRunner.run("/usr/sbin/smbutil", ["lookup", "-a", ip]) else { return nil }
+        for line in output.split(separator: "\n") {
+            let row = String(line).trimmingCharacters(in: .whitespaces)
+            if row.lowercased().hasPrefix("name:") {
+                return row.split(separator: ":", maxSplits: 1).last.map { String($0).trimmingCharacters(in: .whitespaces) }
             }
         }
         return nil

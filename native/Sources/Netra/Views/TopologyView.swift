@@ -25,7 +25,7 @@ struct TopologyView: View {
             if !collapsed {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 0) {
-                        nodeCard(title: "Internet", subtitle: "WAN", ip: "", ping: nil, style: .internet, confirmed: true)
+                        nodeCard(title: "Internet", subtitle: "WAN", ip: "", pingKeys: [], style: .internet, confirmed: true)
                         let chain = result.topology.routerChain
                         if chain.isEmpty, let gw = result.topology.gatewayBinding?.localGateway, !gw.isEmpty {
                             connector
@@ -88,11 +88,12 @@ struct TopologyView: View {
     }
 
     private func routerNode(title: String, hop: RouterHop?, ip: String, style: NodeStyle, aliases: [String] = []) -> some View {
-        nodeCard(
+        let pingKeys = ([ip] + aliases).filter { !$0.isEmpty }
+        return nodeCard(
             title: title,
             subtitle: hop?.segment ?? "",
             ip: ip,
-            ping: app.gatewayPings[ip],
+            pingKeys: pingKeys,
             style: style,
             aliases: aliases,
             confirmed: hop?.confirmed ?? true
@@ -136,16 +137,26 @@ struct TopologyView: View {
 
     private enum NodeStyle { case internet, router, gateway, local }
 
+    private func resolvePing(keys: [String]) -> (stats: PingStats?, samples: [Double], key: String) {
+        for k in keys {
+            if let stats = app.gatewayPings[k] {
+                return (stats, app.pingHistory[k] ?? [], k)
+            }
+        }
+        return (nil, [], keys.first ?? "")
+    }
+
     private func nodeCard(
         title: String,
         subtitle: String,
         ip: String,
-        ping: PingStats?,
+        pingKeys: [String],
         style: NodeStyle,
         aliases: [String] = [],
         confirmed: Bool
     ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let pingResolved = resolvePing(keys: pingKeys)
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Text(title).font(.caption.weight(.semibold)).foregroundStyle(theme.accent)
                 if style != .internet {
@@ -169,13 +180,13 @@ struct TopologyView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
-            if let ping, style != .internet, !ip.isEmpty {
+            if style != .internet, !pingKeys.isEmpty {
                 LivePingView(
-                    samples: app.pingHistory[ip] ?? [],
-                    stats: ping,
+                    samples: pingResolved.samples,
+                    stats: pingResolved.stats,
                     pulse: app.pingPulse
                 )
-                .id("\(ip)-\(app.pingTick)")
+                .id("\(pingResolved.key)-\(app.pingTick)")
             }
         }
         .frame(minWidth: 152, alignment: .leading)

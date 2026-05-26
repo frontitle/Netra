@@ -12,7 +12,7 @@ enum IPv4Helpers {
     }
 
     static func segmentID(for ip: IPv4Address) -> String {
-        "\(networkBase(ip, cidr: 24).debugDescription)/24"
+        "\(ipv4String(networkBase(ip, cidr: 24)))/24"
     }
 
     static func networkBase(_ ip: IPv4Address, cidr: UInt8) -> IPv4Address {

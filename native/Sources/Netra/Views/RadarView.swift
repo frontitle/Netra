@@ -101,12 +101,6 @@ struct RadarView: View {
             .frame(width: 180)
             TextField(prefs.l10n(.searchPlaceholder), text: $app.searchText)
                 .textFieldStyle(.roundedBorder)
-            TextField(prefs.l10n(.singleIP), text: $app.singleScanIP)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 140)
-            Button(prefs.l10n(.probe)) { Task { await app.scanSingleIP() } }
-                .buttonStyle(FuturisticButtonStyle())
-                .disabled(app.singleScanLoading)
         }
     }
 }

@@ -66,10 +66,10 @@ enum LANScanner {
             let arp = arpEntries[ip]
             let mac = arp?.mac ?? "未知"
             if IPv4Helpers.isIgnoredMAC(mac), arp == nil { continue }
-            let vendor = OUILookup.vendor(for: mac)
             let hostname = DeviceInference.hostname(from: arp?.hostname, ip: ipStr)
             var openPorts = PortScanner.scanTCP(ip: ip, ports: ports)
             openPorts.append(contentsOf: PortScanner.scanUDP(ip: ip, ports: IPv4Helpers.udpProbePorts))
+            let vendor = OUILookup.vendor(for: mac, hostname: hostname, ports: openPorts)
             let os = DeviceInference.inferOS(ports: openPorts, vendor: vendor, mac: mac)
             var role = DeviceInference.inferRole(ip: ipStr, localIP: interface.ip, gateway: interface.gateway, vendor: vendor, ports: openPorts, os: os)
             if role == "Network Device", os != "Unknown" { role = os }
@@ -89,23 +89,15 @@ enum LANScanner {
             devices.append(device)
         }
 
-        let binding = GatewayService.discoverBinding(
+        var binding = GatewayService.discoverBinding(
             defaultGateway: interface.gateway,
             devices: devices,
             routeHops: routeHops,
             primarySegment: primarySegment,
             tailscaleRemote: tailscaleRemote
         )
-        var routerChain = RouterTopologyService.discoverChain(
-            primarySegment: primarySegment,
-            defaultGateway: interface.gateway,
-            devices: devices,
-            routeHops: routeHops,
-            tailscaleRemote: tailscaleRemote
-        )
-        for i in routerChain.indices { routerChain[i].tier = i }
-        if let binding, !binding.upstreamGateway.isEmpty,
-           let upstream = IPv4Helpers.parseIPv4(binding.upstreamGateway) {
+        if let initialBinding = binding, !initialBinding.upstreamGateway.isEmpty,
+           let upstream = IPv4Helpers.parseIPv4(initialBinding.upstreamGateway) {
             let upstreamSeg = IPv4Helpers.networkBase(upstream, cidr: 24)
             PingService.sweep(collectPingTargets([(upstreamSeg, 24)]).map { IPv4Helpers.ipv4String($0) })
             Thread.sleep(forTimeInterval: 0.1)
@@ -117,16 +109,16 @@ enum LANScanner {
                     extraIPs.insert(ip)
                 }
             }
-            if let upIP = IPv4Helpers.parseIPv4(binding.upstreamGateway) { extraIPs.insert(upIP) }
-            binding.aliasIPs.forEach { if let a = IPv4Helpers.parseIPv4($0) { extraIPs.insert(a) } }
+            if let upIP = IPv4Helpers.parseIPv4(initialBinding.upstreamGateway) { extraIPs.insert(upIP) }
+            initialBinding.aliasIPs.forEach { if let a = IPv4Helpers.parseIPv4($0) { extraIPs.insert(a) } }
             for ip in extraIPs {
                 let ipStr = IPv4Helpers.ipv4String(ip)
                 let arp = arpEntries[ip]
                 let mac = arp?.mac ?? "未知"
-                let vendor = OUILookup.vendor(for: mac)
                 let hostname = DeviceInference.hostname(from: arp?.hostname, ip: ipStr)
                 var openPorts = PortScanner.scanTCP(ip: ip, ports: ports)
                 openPorts.append(contentsOf: PortScanner.scanUDP(ip: ip, ports: IPv4Helpers.udpProbePorts))
+                let vendor = OUILookup.vendor(for: mac, hostname: hostname, ports: openPorts)
                 let os = DeviceInference.inferOS(ports: openPorts, vendor: vendor, mac: mac)
                 var role = DeviceInference.inferRole(ip: ipStr, localIP: interface.ip, gateway: interface.gateway, vendor: vendor, ports: openPorts, os: os)
                 if role == "Network Device", os != "Unknown" { role = os }
@@ -141,6 +133,21 @@ enum LANScanner {
                 }
             }
         }
+        binding = GatewayService.discoverBinding(
+            defaultGateway: interface.gateway,
+            devices: devices,
+            routeHops: routeHops,
+            primarySegment: primarySegment,
+            tailscaleRemote: tailscaleRemote
+        )
+        var routerChain = RouterTopologyService.discoverChain(
+            primarySegment: primarySegment,
+            defaultGateway: interface.gateway,
+            devices: devices,
+            routeHops: routeHops,
+            tailscaleRemote: tailscaleRemote
+        )
+        for i in routerChain.indices { routerChain[i].tier = i }
         applyGatewayRoles(&devices, binding: binding, routerChain: routerChain)
         let dualHomed = discoverDualHomed(devices: devices, hostInterfaces: hostInterfaces)
         var localIPs = NetworkInterfaceService.collectLocalIPs(primary: interface, interfaces: hostInterfaces)
@@ -164,32 +171,6 @@ enum LANScanner {
             devices: devices,
             topology: topology,
             tailscale: tailscale
-        )
-    }
-
-    static func scanHost(ip: String) throws -> LanDevice {
-        guard let target = IPv4Helpers.parseIPv4(ip) else { throw ScanError.message("IP 无效") }
-        ARPService.refresh(ip: ip)
-        Thread.sleep(forTimeInterval: 0.15)
-        let arp = ARPService.readAll()[target]
-        let interface = try NetworkInterfaceService.currentInterface()
-        let mac = arp?.mac ?? "未知"
-        let vendor = OUILookup.vendor(for: mac)
-        let hostname = DeviceInference.hostname(from: arp?.hostname, ip: ip)
-        var openPorts = PortScanner.scanTCP(ip: target, ports: IPv4Helpers.defaultScanPorts)
-        openPorts.append(contentsOf: PortScanner.scanUDP(ip: target, ports: IPv4Helpers.udpProbePorts))
-        let os = DeviceInference.inferOS(ports: openPorts, vendor: vendor, mac: mac)
-        let role = DeviceInference.inferRole(ip: ip, localIP: interface.ip, gateway: interface.gateway, vendor: vendor, ports: openPorts, os: os)
-        return LanDevice(
-            ip: ip,
-            mac: mac,
-            vendor: vendor,
-            hostname: hostname,
-            localDNS: DeviceInference.localDNS(hostname: hostname, ip: ip),
-            os: os,
-            role: role,
-            segment: IPv4Helpers.segmentID(for: target),
-            ports: openPorts
         )
     }
 
