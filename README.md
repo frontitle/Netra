@@ -21,6 +21,16 @@ chmod +x native/scripts/build-native-macos.sh
 
 Output: **`release/Netra.app`**
 
+### macOS says「已损坏，无法打开」?
+
+Not corruption — Gatekeeper blocking unsigned downloads. Run:
+
+```bash
+xattr -cr /Applications/Netra.app
+```
+
+See [docs/INSTALL.md](docs/INSTALL.md) for details.
+
 ## Features
 
 - Full LAN scan on launch; auto ping sweep when new segments appear

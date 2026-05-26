@@ -56,9 +56,25 @@ fi
 
 chmod +x "$STAGE/Contents/MacOS/$BINARY_NAME"
 
+ENTITLEMENTS="$NATIVE/Netra.entitlements"
+echo "→ 代码签名 (ad-hoc，避免「已损坏」提示)…"
+if [[ -f "$ENTITLEMENTS" ]]; then
+  codesign --force --sign - --entitlements "$ENTITLEMENTS" --timestamp=none \
+    "$STAGE/Contents/MacOS/$BINARY_NAME"
+  codesign --force --deep --sign - --entitlements "$ENTITLEMENTS" --timestamp=none \
+    "$STAGE"
+else
+  codesign --force --sign - --timestamp=none "$STAGE/Contents/MacOS/$BINARY_NAME"
+  codesign --force --deep --sign - --timestamp=none "$STAGE"
+fi
+codesign --verify --deep --strict "$STAGE" 2>&1
+# 发布 zip 前去掉隔离标记（本机构建产物）
+xattr -cr "$STAGE" 2>/dev/null || true
+
 mkdir -p "$RELEASE"
 rm -rf "$RELEASE/$APP_NAME"
 cp -R "$STAGE" "$RELEASE/$APP_NAME"
+xattr -cr "$RELEASE/$APP_NAME" 2>/dev/null || true
 
 BUILD_TIME="$(date '+%Y-%m-%d %H:%M:%S %z')"
 cat > "$RELEASE/BUILD.txt" <<EOF
