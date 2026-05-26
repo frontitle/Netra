@@ -1,6 +1,6 @@
 {
   "name": "netra",
-  "version": "0.1.7-beta",
+  "version": "0.1.8-beta",
   "private": true,
   "description": "Netra — native macOS LAN scanner",
   "scripts": {
