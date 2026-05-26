@@ -20,8 +20,9 @@ enum RouterTopologyService {
             routeHops: routeHops,
             devices: physical
         )
-        var hops = orderedSegments.compactMap { segment in
-            routerHop(for: segment, defaultGateway: defaultGateway, macGroups: macGroups, devices: physical)
+        var hops = orderedSegments.compactMap { segment -> RouterHop? in
+            guard let hop = routerHop(for: segment, defaultGateway: defaultGateway, macGroups: macGroups, devices: physical) else { return nil }
+            return hop
         }
         if !defaultGateway.isEmpty, defaultGateway != "未知",
            !hops.contains(where: { $0.ip == defaultGateway }),
@@ -32,6 +33,18 @@ enum RouterTopologyService {
                devices: physical
            ) {
             hops.append(hop)
+        }
+        for i in hops.indices {
+            let isPrimaryGW = hops[i].ip == defaultGateway || hops[i].segment == primarySegment
+            let isUpstream = i == 0 && hops.count > 1
+            if isUpstream {
+                hops[i].label = "上级路由"
+            } else if isPrimaryGW || i == hops.count - 1 {
+                hops[i].label = hops.count > 1 ? "二级路由 / 网关" : "网关"
+            } else {
+                hops[i].label = "中继路由"
+            }
+            hops[i].confirmed = true
         }
         return hops
     }
@@ -168,9 +181,10 @@ enum RouterTopologyService {
             ip: preferred.ip,
             segment: segment,
             mac: mac,
-            label: isLocalGW ? "二级路由" : "上级路由",
+            label: isLocalGW ? "网关" : "路由",
             aliasIPs: aliases,
-            tier: 0
+            tier: 0,
+            confirmed: !mac.isEmpty && mac != "未知"
         )
     }
 }

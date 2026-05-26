@@ -104,10 +104,48 @@ enum LANScanner {
             tailscaleRemote: tailscaleRemote
         )
         for i in routerChain.indices { routerChain[i].tier = i }
+        if let binding, !binding.upstreamGateway.isEmpty,
+           let upstream = IPv4Helpers.parseIPv4(binding.upstreamGateway) {
+            let upstreamSeg = IPv4Helpers.networkBase(upstream, cidr: 24)
+            PingService.sweep(collectPingTargets([(upstreamSeg, 24)]).map { IPv4Helpers.ipv4String($0) })
+            Thread.sleep(forTimeInterval: 0.1)
+            let upstreamARP = ARPService.readAll()
+            var extraIPs = Set<IPv4Address>()
+            for (ip, entry) in upstreamARP where IPv4Helpers.isValidHost(ip) {
+                arpEntries[ip] = entry
+                if !devices.contains(where: { $0.ip == IPv4Helpers.ipv4String(ip) }) {
+                    extraIPs.insert(ip)
+                }
+            }
+            if let upIP = IPv4Helpers.parseIPv4(binding.upstreamGateway) { extraIPs.insert(upIP) }
+            binding.aliasIPs.forEach { if let a = IPv4Helpers.parseIPv4($0) { extraIPs.insert(a) } }
+            for ip in extraIPs {
+                let ipStr = IPv4Helpers.ipv4String(ip)
+                let arp = arpEntries[ip]
+                let mac = arp?.mac ?? "未知"
+                let vendor = OUILookup.vendor(for: mac)
+                let hostname = DeviceInference.hostname(from: arp?.hostname, ip: ipStr)
+                var openPorts = PortScanner.scanTCP(ip: ip, ports: ports)
+                openPorts.append(contentsOf: PortScanner.scanUDP(ip: ip, ports: IPv4Helpers.udpProbePorts))
+                var role = DeviceInference.inferRole(ip: ipStr, localIP: interface.ip, gateway: interface.gateway, vendor: vendor, ports: openPorts)
+                let os = DeviceInference.inferOS(ports: openPorts, vendor: vendor, mac: mac)
+                if role == "普通联网设备", os != "未知" { role = os }
+                let device = LanDevice(
+                    ip: ipStr, mac: mac, vendor: vendor, hostname: hostname,
+                    localDNS: DeviceInference.localDNS(hostname: hostname, ip: ipStr),
+                    os: os, role: role, segment: IPv4Helpers.segmentID(for: ip), ports: openPorts
+                )
+                if !TailscaleService.isRemoteSegment(device.segment, remote: tailscaleRemote) {
+                    onDeviceFound?(device)
+                    devices.append(device)
+                }
+            }
+        }
         applyGatewayRoles(&devices, binding: binding, routerChain: routerChain)
         let dualHomed = discoverDualHomed(devices: devices, hostInterfaces: hostInterfaces)
         var localIPs = NetworkInterfaceService.collectLocalIPs(primary: interface, interfaces: hostInterfaces)
         if let ts = tailscale, !ts.ipv4.isEmpty, !localIPs.contains(ts.ipv4) { localIPs.append(ts.ipv4) }
+        let localEndpoints = buildLocalEndpoints(primary: interface, interfaces: hostInterfaces)
         let topology = TopologyService.build(
             interface: interface,
             devices: devices,
@@ -119,7 +157,14 @@ enum LANScanner {
             tunnelSubnets: tailscale?.remoteSubnets ?? [],
             routeSegments: routeSegments
         )
-        return LanScanResult(interface: interface, localIPs: localIPs, devices: devices, topology: topology, tailscale: tailscale)
+        return LanScanResult(
+            interface: interface,
+            localIPs: localIPs,
+            localEndpoints: localEndpoints,
+            devices: devices,
+            topology: topology,
+            tailscale: tailscale
+        )
     }
 
     static func scanHost(ip: String) throws -> LanDevice {
@@ -249,10 +294,29 @@ enum LANScanner {
         }
     }
 
+    private static func buildLocalEndpoints(primary: NetworkInterface, interfaces: [HostInterfaceInfo]) -> [LocalEndpoint] {
+        interfaces
+            .filter { $0.status == "up" && !$0.ip.isEmpty && !$0.ip.hasPrefix("127.") }
+            .map { iface in
+                LocalEndpoint(
+                    interfaceName: iface.name,
+                    label: "\(iface.name) · \(iface.label)",
+                    ip: iface.ip,
+                    kind: iface.kind,
+                    isPrimary: iface.ip == primary.ip
+                )
+            }
+            .sorted { a, b in
+                if a.isPrimary != b.isPrimary { return a.isPrimary }
+                return a.interfaceName.localizedStandardCompare(b.interfaceName) == .orderedAscending
+            }
+    }
+
     private static func cancelledResult(interface: NetworkInterface) -> LanScanResult {
         LanScanResult(
             interface: interface,
             localIPs: [interface.ip],
+            localEndpoints: [LocalEndpoint(interfaceName: interface.name, label: interface.name, ip: interface.ip, kind: "wifi", isPrimary: true)],
             devices: [],
             topology: NetworkTopology(segments: [], interfaces: [], gatewayBinding: nil, routerChain: [], dualHomed: [], primaryInterface: interface.name, nodes: [], links: []),
             tailscale: nil

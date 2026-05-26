@@ -137,7 +137,7 @@ final class AppPreferences: ObservableObject {
         language = AppLanguage(rawValue: langRaw ?? "") ?? Self.defaultLanguage()
         let appearanceRaw = UserDefaults.standard.string(forKey: Keys.appearance)
             ?? UserDefaults.standard.string(forKey: LegacyKeys.appearance)
-        appearance = AppearanceMode(rawValue: appearanceRaw ?? "") ?? .dark
+        appearance = AppearanceMode(rawValue: appearanceRaw ?? "") ?? .system
         let accentRaw = UserDefaults.standard.string(forKey: Keys.accent)
             ?? UserDefaults.standard.string(forKey: LegacyKeys.accent)
         accent = AccentPreset(rawValue: accentRaw ?? "") ?? .cyan

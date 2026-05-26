@@ -58,13 +58,13 @@ enum TopologyService {
             if let binding = gatewayBinding {
                 var hops: [RouterHop] = []
                 if !binding.upstreamGateway.isEmpty {
-                    hops.append(RouterHop(ip: binding.upstreamGateway, segment: "", mac: "", label: "上级路由", aliasIPs: [], tier: 0))
+                    hops.append(RouterHop(ip: binding.upstreamGateway, segment: "", mac: "", label: "上级路由", aliasIPs: [], tier: 0, confirmed: true))
                 }
-                hops.append(RouterHop(ip: binding.localGateway, segment: "", mac: "", label: "默认网关", aliasIPs: binding.aliasIPs, tier: hops.count))
+                hops.append(RouterHop(ip: binding.localGateway, segment: "", mac: "", label: "默认网关", aliasIPs: binding.aliasIPs, tier: hops.count, confirmed: true))
                 return hops
             }
             if !defaultGW.isEmpty, defaultGW != "未知" {
-                return [RouterHop(ip: defaultGW, segment: "", mac: "", label: "网关", aliasIPs: [], tier: 0)]
+                return [RouterHop(ip: defaultGW, segment: "", mac: "", label: "网关", aliasIPs: [], tier: 0, confirmed: true)]
             }
             return []
         }()

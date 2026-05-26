@@ -45,6 +45,9 @@ enum PingService {
         }
         let jitter = max(0, maxV - minV)
         let status: PingQuality = loss >= 100 ? .down : (loss > 5 || avg > 80 ? .bad : (loss > 1 || avg > 30 ? .warning : .good))
-        return PingStats(target: target, label: label, avgMs: avg, minMs: minV, maxMs: maxV, jitterMs: jitter, packetLoss: loss, status: status)
+        return PingStats(
+            target: target, label: label, avgMs: avg, minMs: minV, maxMs: maxV,
+            jitterMs: jitter, packetLoss: loss, status: status, measuredAt: Date()
+        )
     }
 }

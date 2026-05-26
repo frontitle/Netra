@@ -18,16 +18,20 @@ enum WifiScanner {
                 let rssi = net.rssiValue
                 let signalScore = (Double(rssi + 90) / 60.0) * 100.0
                 let percent = max(0, min(100, Int(signalScore)))
+                let ch = net.wlanChannel
                 return WifiNetwork(
                     ssid: ssid,
                     bssid: bssid,
                     routerVendor: OUILookup.vendor(for: bssid),
-                    channel: net.wlanChannel.map { String($0.channelNumber) } ?? "",
-                    band: bandLabel(net.wlanChannel?.channelBand),
+                    channel: ch.map { String($0.channelNumber) } ?? "",
+                    band: bandLabel(ch?.channelBand),
                     signal: "\(rssi) dBm",
                     signalPercent: percent,
                     security: networkSecurity(net),
-                    phyMode: "",
+                    phyMode: phyModeLabel(ch),
+                    noise: "\(net.noiseMeasurement) dBm",
+                    channelWidth: channelWidthLabel(ch),
+                    isIBSS: net.ibss,
                     isConnected: ssid == connected
                 )
             }.sorted { $0.signalPercent > $1.signalPercent }
@@ -56,6 +60,9 @@ enum WifiScanner {
                     signalPercent: 0,
                     security: "",
                     phyMode: "",
+                    noise: "",
+                    channelWidth: "",
+                    isIBSS: false,
                     isConnected: line.contains("Current Network")
                 ))
             }
@@ -68,6 +75,25 @@ enum WifiScanner {
         case .band2GHz: return "2.4 GHz"
         case .band5GHz: return "5 GHz"
         case .band6GHz: return "6 GHz"
+        default: return ""
+        }
+    }
+
+    private static func phyModeLabel(_ channel: CWChannel?) -> String {
+        guard let channel else { return "" }
+        if #available(macOS 14.0, *) {
+            return channel.channelBand == .band6GHz ? "802.11ax" : "802.11ac/n"
+        }
+        return channel.channelBand == .band2GHz ? "802.11n" : "802.11ac"
+    }
+
+    private static func channelWidthLabel(_ channel: CWChannel?) -> String {
+        guard let channel else { return "" }
+        switch channel.channelWidth {
+        case .width20MHz: return "20 MHz"
+        case .width40MHz: return "40 MHz"
+        case .width80MHz: return "80 MHz"
+        case .width160MHz: return "160 MHz"
         default: return ""
         }
     }

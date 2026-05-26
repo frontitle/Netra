@@ -1,6 +1,8 @@
-# Netra
+# Netra — LAN Scanner & Network Topology for macOS
 
-Netra (“eye” in Sanskrit) is a native macOS application for discovering devices on your local network, mapping router topology, and diagnosing connectivity.
+**See your network. Clearly.**
+
+Netra is a professional LAN scanning and network topology tool built exclusively for macOS. The name Netra means “eye” or “vision”—it reveals nodes, links, routes, and blind spots on your network.
 
 ## Highlights
 

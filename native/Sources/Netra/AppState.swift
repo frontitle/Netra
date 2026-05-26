@@ -7,19 +7,30 @@ final class AppState: ObservableObject {
     @Published var section: AppSection = .radar
 
     @Published var wifiNetworks: [WifiNetwork] = []
+    @Published var selectedWifiID: String?
+    var selectedWifi: WifiNetwork? {
+        get {
+            guard let id = selectedWifiID else { return nil }
+            return wifiNetworks.first { $0.id == id }
+        }
+        set {
+            selectedWifiID = newValue?.id
+        }
+    }
     @Published var lanResult: LanScanResult?
     @Published var devices: [LanDevice] = []
     @Published var quality: QualityReport?
     @Published var snapshots: [ScanSnapshot] = []
 
     @Published var isScanning = false
-    /// 扫描进行中仅更新计数，避免每发现一台设备就重绘整张表导致界面卡死。
     @Published var scanFoundCount = 0
     @Published var qualityLoading = false
     @Published var errorMessage = ""
     @Published var lastScanAt = ""
 
     @Published var gatewayPings: [String: PingStats] = [:]
+    @Published var pingHistory: [String: [Double]] = [:]
+    @Published var pingPulse = false
     @Published var topologyCollapsed = false
     @Published var segmentFilter = ""
     @Published var roleFilter = ""
@@ -75,13 +86,15 @@ final class AppState: ObservableObject {
         selectedDevice = nil
         segmentFilter = ""
         gatewayPings = [:]
+        pingHistory = [:]
         scanFoundCount = 0
         ScanCancellation.shared.reset()
 
         await Task.detached(priority: .userInitiated) {
             OUILookup.warmup()
             do {
-                let wifi = WifiScanner.scan()
+                let locStatus = await MainActor.run { LocationAuthorizationService.shared.status }
+                let wifi = LocationAuthorizationService.canScanWifi(status: locStatus) ? WifiScanner.scan() : []
                 var foundCount = 0
                 let lan = try LANScanner.scan { _ in
                     foundCount += 1
@@ -156,13 +169,18 @@ final class AppState: ObservableObject {
         devices.sort { $0.ip.localizedStandardCompare($1.ip) == .orderedAscending }
     }
 
-    private func startGatewayPingLoop() {
+    func startGatewayPingLoop() {
         pingTimer?.invalidate()
-        guard section == .radar, !topologyCollapsed else { return }
-        pingTimer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { [weak self] _ in
+        guard section == .radar else { return }
+        pingTimer = Timer.scheduledTimer(withTimeInterval: 1.2, repeats: true) { [weak self] _ in
             Task { await self?.refreshGatewayPing() }
         }
         Task { await refreshGatewayPing() }
+    }
+
+    func stopGatewayPingLoop() {
+        pingTimer?.invalidate()
+        pingTimer = nil
     }
 
     func refreshGatewayPing() async {
@@ -170,17 +188,28 @@ final class AppState: ObservableObject {
         if let gw = lanResult?.interface.gateway, gw != "未知" { targets.insert(gw) }
         for hop in lanResult?.topology.routerChain ?? [] {
             targets.insert(hop.ip)
+            hop.aliasIPs.forEach { targets.insert($0) }
+        }
+        if let upstream = lanResult?.topology.gatewayBinding?.upstreamGateway, !upstream.isEmpty {
+            targets.insert(upstream)
         }
         var pings: [String: PingStats] = [:]
         await withTaskGroup(of: (String, PingStats).self) { group in
             for ip in targets {
-                group.addTask { (ip, PingService.stats(target: ip, label: ip)) }
+                group.addTask { (ip, PingService.stats(target: ip, label: ip, count: 1)) }
             }
             for await pair in group {
                 pings[pair.0] = pair.1
             }
         }
+        for (ip, stat) in pings {
+            var samples = pingHistory[ip] ?? []
+            samples.append(stat.avgMs)
+            if samples.count > 14 { samples.removeFirst(samples.count - 14) }
+            pingHistory[ip] = samples
+        }
         gatewayPings = pings
+        pingPulse.toggle()
     }
 
     private func saveSnapshot(wifi: [WifiNetwork], lan: LanScanResult) {

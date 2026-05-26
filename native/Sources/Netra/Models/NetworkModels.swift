@@ -11,6 +11,9 @@ struct WifiNetwork: Identifiable, Hashable, Codable {
     var signalPercent: Int
     var security: String
     var phyMode: String
+    var noise: String?
+    var channelWidth: String?
+    var isIBSS: Bool?
     var isConnected: Bool
 }
 
@@ -63,6 +66,16 @@ struct RouterHop: Identifiable, Hashable, Codable {
     var label: String
     var aliasIPs: [String]
     var tier: Int
+    var confirmed: Bool = true
+}
+
+struct LocalEndpoint: Identifiable, Hashable, Codable {
+    var id: String { "\(interfaceName)-\(ip)" }
+    var interfaceName: String
+    var label: String
+    var ip: String
+    var kind: String
+    var isPrimary: Bool
 }
 
 struct DualHomedDevice: Identifiable, Hashable, Codable {
@@ -124,6 +137,7 @@ struct NetworkTopology: Codable, Hashable {
 struct LanScanResult: Codable, Hashable {
     var interface: NetworkInterface
     var localIPs: [String]
+    var localEndpoints: [LocalEndpoint]?
     var devices: [LanDevice]
     var topology: NetworkTopology
     var tailscale: TailscaleInfo?
@@ -143,6 +157,36 @@ struct PingStats: Identifiable, Hashable, Codable {
     var jitterMs: Double
     var packetLoss: Double
     var status: PingQuality
+    var measuredAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case target, label, avgMs, minMs, maxMs, jitterMs, packetLoss, status, measuredAt
+    }
+
+    init(target: String, label: String, avgMs: Double, minMs: Double, maxMs: Double, jitterMs: Double, packetLoss: Double, status: PingQuality, measuredAt: Date? = nil) {
+        self.target = target
+        self.label = label
+        self.avgMs = avgMs
+        self.minMs = minMs
+        self.maxMs = maxMs
+        self.jitterMs = jitterMs
+        self.packetLoss = packetLoss
+        self.status = status
+        self.measuredAt = measuredAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        target = try c.decode(String.self, forKey: .target)
+        label = try c.decode(String.self, forKey: .label)
+        avgMs = try c.decode(Double.self, forKey: .avgMs)
+        minMs = try c.decode(Double.self, forKey: .minMs)
+        maxMs = try c.decode(Double.self, forKey: .maxMs)
+        jitterMs = try c.decode(Double.self, forKey: .jitterMs)
+        packetLoss = try c.decode(Double.self, forKey: .packetLoss)
+        status = try c.decode(PingQuality.self, forKey: .status)
+        measuredAt = try c.decodeIfPresent(Date.self, forKey: .measuredAt)
+    }
 }
 
 struct QualityReport: Codable, Hashable {

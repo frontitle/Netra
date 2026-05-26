@@ -26,8 +26,8 @@ enum RouteTableService {
         return (gateways, segments)
     }
 
-    static func discoverRouteHops(maxHops: UInt8 = 2) -> [IPv4Address] {
-        guard let output = ShellRunner.run("/usr/sbin/traceroute", ["-m", "\(maxHops)", "-q", "1", "-w", "1", "-n", "1.1.1.1"]) else {
+    static func discoverRouteHops(maxHops: UInt8 = 5) -> [IPv4Address] {
+        guard let output = ShellRunner.run("/usr/sbin/traceroute", ["-m", "\(maxHops)", "-q", "1", "-w", "1", "-n", "8.8.8.8"]) else {
             return []
         }
         var hops: [IPv4Address] = []

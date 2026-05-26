@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct TopologyView: View {
+    @EnvironmentObject private var app: AppState
     @EnvironmentObject private var prefs: AppPreferences
     @Environment(\.theme) private var theme
 
@@ -25,42 +26,79 @@ struct TopologyView: View {
             if !collapsed {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 0) {
-                        nodeCard(title: "Internet", subtitle: "WAN", ip: "", ping: nil, style: .internet)
+                        nodeCard(title: "Internet", subtitle: "WAN", ip: "", ping: nil, style: .internet, confirmed: true)
                         let chain = result.topology.routerChain
                         if chain.isEmpty, let gw = result.topology.gatewayBinding?.localGateway, !gw.isEmpty {
                             connector
-                            nodeCard(title: prefs.l10n(.qualityGateway), subtitle: gw, ip: gw, ping: gatewayPings[gw], style: .router)
+                            routerNode(title: prefs.l10n(.qualityGateway), hop: nil, ip: gw, style: .router)
                         } else {
                             ForEach(Array(chain.enumerated()), id: \.element.id) { index, hop in
                                 connector
                                 let style: NodeStyle = index == chain.count - 1 ? .gateway : .router
-                                nodeCard(
-                                    title: hop.label,
-                                    subtitle: hop.segment,
-                                    ip: hop.ip,
-                                    ping: gatewayPings[hop.ip],
-                                    style: style,
-                                    aliases: hop.aliasIPs
-                                )
+                                routerNode(title: hop.label, hop: hop, ip: hop.ip, style: style, aliases: hop.aliasIPs)
                             }
                         }
                         connector
-                        nodeCard(
-                            title: "Mac",
-                            subtitle: result.interface.name,
-                            ip: result.localIPs.joined(separator: " · "),
-                            ping: nil,
-                            style: .local
-                        )
+                        localMacCard
                     }
                     .padding(12)
                 }
-                .frame(maxHeight: 140)
+                .frame(maxHeight: 168)
                 .background(AppTheme.glassPanel(cornerRadius: 12, theme: theme))
 
                 segmentFilters
             }
         }
+        .onAppear { app.startGatewayPingLoop() }
+        .onDisappear { /* keep loop while on radar */ }
+    }
+
+    private var localMacCard: some View {
+        let endpoints = result.localEndpoints ?? []
+        let primary = endpoints.first(where: \.isPrimary) ?? endpoints.first
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(prefs.l10n(.localThisMac))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(theme.accent)
+            if let primary {
+                HStack(spacing: 6) {
+                    Text(prefs.l10n(.localPrimaryIP))
+                        .font(.caption2.weight(.bold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(theme.accent.opacity(0.25), in: Capsule())
+                    Text(primary.ip)
+                        .font(.system(.callout, design: .monospaced).weight(.semibold))
+                }
+                Text("\(primary.interfaceName) · \(primary.label)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(endpoints.filter { !$0.isPrimary }) { ep in
+                Text("\(ep.interfaceName): \(ep.ip)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(minWidth: 168, alignment: .leading)
+        .padding(12)
+        .background(theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(theme.accent.opacity(0.55), lineWidth: 1.5)
+        )
+    }
+
+    private func routerNode(title: String, hop: RouterHop?, ip: String, style: NodeStyle, aliases: [String] = []) -> some View {
+        nodeCard(
+            title: title,
+            subtitle: hop?.segment ?? "",
+            ip: ip,
+            ping: gatewayPings[ip],
+            style: style,
+            aliases: aliases,
+            confirmed: hop?.confirmed ?? true
+        )
     }
 
     private var segmentFilters: some View {
@@ -100,9 +138,27 @@ struct TopologyView: View {
 
     private enum NodeStyle { case internet, router, gateway, local }
 
-    private func nodeCard(title: String, subtitle: String, ip: String, ping: PingStats?, style: NodeStyle, aliases: [String] = []) -> some View {
+    private func nodeCard(
+        title: String,
+        subtitle: String,
+        ip: String,
+        ping: PingStats?,
+        style: NodeStyle,
+        aliases: [String] = [],
+        confirmed: Bool
+    ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption.weight(.semibold)).foregroundStyle(theme.accent)
+            HStack(spacing: 6) {
+                Text(title).font(.caption.weight(.semibold)).foregroundStyle(theme.accent)
+                if style != .internet {
+                    Text(confirmed ? prefs.l10n(.routerConfirmed) : prefs.l10n(.routerUnconfirmed))
+                        .font(.system(size: 9, weight: .bold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background((confirmed ? Color.green : Color.orange).opacity(0.2), in: Capsule())
+                        .foregroundStyle(confirmed ? .green : .orange)
+                }
+            }
             if !ip.isEmpty {
                 Text(ip).font(.system(.callout, design: .monospaced)).lineLimit(2)
             }
@@ -115,13 +171,12 @@ struct TopologyView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
-            if let ping {
-                HStack(spacing: 6) {
-                    Text("\(Int(ping.avgMs))ms")
-                    Text("±\(Int(ping.jitterMs))")
-                        .foregroundStyle(.secondary)
-                }
-                .font(.caption2.monospacedDigit())
+            if let ping, style != .internet {
+                LivePingView(
+                    samples: app.pingHistory[ip] ?? [],
+                    stats: ping,
+                    pulse: app.pingPulse
+                )
             }
         }
         .frame(minWidth: 152, alignment: .leading)

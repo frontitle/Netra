@@ -14,12 +14,34 @@ struct ContentView: View {
             } content: {
                 mainPane
             } detail: {
-                DeviceInspectorView(device: app.selectedDevice)
-                    .frame(minWidth: 300, idealWidth: 340)
+                detailPane
+                    .frame(minWidth: 300, idealWidth: 360)
             }
         }
         .environment(\.theme, prefs.themeColors)
         .preferredColorScheme(prefs.preferredColorScheme)
+        .onChange(of: app.section) { section in
+            if section == .radar {
+                app.startGatewayPingLoop()
+            } else {
+                app.stopGatewayPingLoop()
+            }
+            if section != .wifi {
+                app.selectedWifiID = nil
+            }
+            if section != .radar {
+                app.selectedDevice = nil
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var detailPane: some View {
+        if app.section == .wifi {
+            WifiInspectorView(network: app.selectedWifi)
+        } else {
+            DeviceInspectorView(device: app.selectedDevice)
+        }
     }
 
     private var sidebar: some View {
@@ -42,7 +64,7 @@ struct ContentView: View {
             HStack(spacing: 10) {
                 NetraLogo(size: 32)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Netra")
+                    Text(Brand.productName)
                         .font(.system(.title3, design: .rounded).weight(.bold))
                     Text(prefs.l10n(.appTagline))
                         .font(.caption2)

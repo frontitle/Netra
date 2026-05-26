@@ -55,8 +55,9 @@ struct SettingsView: View {
             HStack(spacing: 12) {
                 NetraLogo(size: 56)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Netra")
-                        .font(.system(.title2, design: .rounded).weight(.bold))
+                    Text(prefs.l10n(.appFullName))
+                        .font(.system(.headline, design: .rounded).weight(.bold))
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(prefs.l10n(.appTagline))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -109,6 +110,10 @@ struct SettingsView: View {
             }
             .padding(.top, 4)
             Text(prefs.l10n(.aboutDescription))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(prefs.l10n(.brandStory))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

@@ -1,6 +1,9 @@
 # Netra
 
-**Netra** is a native macOS LAN scanner and network topology tool (SwiftUI + CoreWLAN). No WebView.
+**Netra — LAN Scanner & Network Topology for macOS**  
+*See your network. Clearly.*
+
+Native LAN scanner and topology tool (SwiftUI + CoreWLAN). No WebView.
 
 **Repository:** [github.com/frontitle/Netra](https://github.com/frontitle/Netra) · **Status:** Beta (`0.1.x-beta`)
 

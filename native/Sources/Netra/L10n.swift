@@ -83,6 +83,19 @@ enum L10nKey: String, CaseIterable {
     case tablePorts
     case openInBrowser
     case copyright
+    case appFullName
+    case brandStory
+    case wifiLocationTitle
+    case wifiLocationBody
+    case wifiOpenSettings
+    case wifiGrantAccess
+    case wifiSelectNetwork
+    case wifiInspectorHint
+    case localPrimaryIP
+    case localThisMac
+    case routerConfirmed
+    case routerUnconfirmed
+    case pingLive
 }
 
 enum L10n {
@@ -97,7 +110,9 @@ enum L10n {
 
     private static let zh: [L10nKey: String] = [
         .appName: "Netra",
-        .appTagline: "局域网洞察",
+        .appTagline: "看清你的网络",
+        .appFullName: "Netra — macOS 局域网扫描与网络拓扑",
+        .brandStory: "Netra 意为「眼」或「视觉」。如同眼睛让隐藏之物变得清晰，Netra 从 Mac 上揭示网络的隐形结构——节点、链路、路由与盲区。",
         .sectionDiscovery: "发现",
         .sectionDiagnostics: "诊断",
         .navLanDevices: "局域网设备",
@@ -138,7 +153,7 @@ enum L10n {
         .updateCheckFailed: "暂时无法检查更新，请稍后重试",
         .openReleases: "打开下载页",
         .viewOnGitHub: "在 GitHub 查看",
-        .aboutDescription: "Netra 是 macOS 原生局域网扫描与网络拓扑工具，使用 SwiftUI 与 CoreWLAN，不依赖 WebView。",
+        .aboutDescription: "Netra 是专为 macOS 打造的专业局域网扫描与网络拓扑工具。可实时发现设备、可视化多层路由路径，并对网络中每个节点进行深度检视。",
         .aboutRuntime: "macOS 13+ · SwiftUI · CoreWLAN",
         .newVersionBadge: "有新版本",
         .inspectorSelectDevice: "选择一台设备",
@@ -178,11 +193,24 @@ enum L10n {
         .tablePorts: "端口",
         .openInBrowser: "在浏览器打开",
         .copyright: "© Netra · 开源软件",
+        .wifiLocationTitle: "需要定位权限",
+        .wifiLocationBody: "macOS 要求授予定位权限后才能扫描附近 Wi-Fi 的 SSID 与 BSSID。",
+        .wifiOpenSettings: "打开系统定位设置",
+        .wifiGrantAccess: "请求定位授权",
+        .wifiSelectNetwork: "选择 Wi-Fi 网络",
+        .wifiInspectorHint: "点击列表中的网络以查看全部参数。",
+        .localPrimaryIP: "主 IP",
+        .localThisMac: "本机",
+        .routerConfirmed: "已确认",
+        .routerUnconfirmed: "待确认",
+        .pingLive: "实时",
     ]
 
     private static let en: [L10nKey: String] = [
         .appName: "Netra",
-        .appTagline: "LAN insight",
+        .appTagline: "See your network. Clearly.",
+        .appFullName: "Netra — LAN Scanner & Network Topology for macOS",
+        .brandStory: "The name Netra means \"eye\" or \"vision.\" Just as the eye brings clarity to what is hidden, Netra reveals the invisible structure of your network—nodes, links, routes, and blind spots—all from your Mac.",
         .sectionDiscovery: "Discover",
         .sectionDiagnostics: "Diagnostics",
         .navLanDevices: "LAN Devices",
@@ -223,7 +251,7 @@ enum L10n {
         .updateCheckFailed: "Could not check for updates. Try again later.",
         .openReleases: "Open Releases",
         .viewOnGitHub: "View on GitHub",
-        .aboutDescription: "Netra is a native macOS LAN scanner and network topology tool built with SwiftUI and CoreWLAN — no WebView.",
+        .aboutDescription: "Netra is a professional LAN scanning and network topology tool built exclusively for macOS. It discovers devices in real time, visualizes multi-layer routing paths, and provides deep inspection of every node on your network.",
         .aboutRuntime: "macOS 13+ · SwiftUI · CoreWLAN",
         .newVersionBadge: "Update available",
         .inspectorSelectDevice: "Select a device",
@@ -263,5 +291,16 @@ enum L10n {
         .tablePorts: "Ports",
         .openInBrowser: "Open in browser",
         .copyright: "© Netra · Open source",
+        .wifiLocationTitle: "Location access required",
+        .wifiLocationBody: "macOS requires Location Services to scan nearby Wi-Fi SSIDs and BSSIDs.",
+        .wifiOpenSettings: "Open Location Settings",
+        .wifiGrantAccess: "Request Location Access",
+        .wifiSelectNetwork: "Select a Wi-Fi network",
+        .wifiInspectorHint: "Click a network in the list to see all parameters.",
+        .localPrimaryIP: "Primary IP",
+        .localThisMac: "This Mac",
+        .routerConfirmed: "Confirmed",
+        .routerUnconfirmed: "Unverified",
+        .pingLive: "Live",
     ]
 }
