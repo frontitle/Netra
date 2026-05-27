@@ -111,11 +111,21 @@ struct TopologyView: View {
     private enum NodeStyle { case internet, router, gateway, local }
 
     private func resolvePing(keys: [String]) -> (stats: PingStats?, samples: [Double], key: String) {
+        var best: (k: String, s: PingStats, samples: [Double])?
         for k in keys {
-            if let stats = app.gatewayPings[k] {
-                return (stats, app.pingHistory[k] ?? [], k)
+            guard let stats = app.gatewayPings[k] else { continue }
+            let samples = app.pingHistory[k] ?? []
+            if best == nil {
+                best = (k, stats, samples)
+                continue
+            }
+            // 优先选择“更可达”的结果：丢包更低，其次平均延时更低。
+            if stats.packetLoss < best!.s.packetLoss ||
+                (stats.packetLoss == best!.s.packetLoss && stats.avgMs < best!.s.avgMs) {
+                best = (k, stats, samples)
             }
         }
+        if let best { return (best.s, best.samples, best.k) }
         return (nil, [], keys.first ?? "")
     }
 

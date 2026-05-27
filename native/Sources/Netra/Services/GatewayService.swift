@@ -33,10 +33,9 @@ enum GatewayService {
                 let seg = IPv4Helpers.segmentID(for: hop)
                 guard hopIP != defaultGateway, seg != localSegment, seg != primarySegment,
                       !TailscaleService.isRemoteSegment(seg, remote: tailscaleRemote) else { continue }
-                if let mac = gatewayMac,
-                   devices.contains(where: { $0.ip == hopIP && IPv4Helpers.normalizeMAC($0.mac) == mac }) {
-                    return hopIP
-                }
+                // traceroute 已经给出了“上级私网跳”；这一步不应依赖“同 MAC”才能成立，
+                // 否则会出现“没扫描上游网段→拿不到 MAC→无法确定 upstream→也就永远不会去扫上游”的死循环。
+                return hopIP
             }
             return ""
         }()

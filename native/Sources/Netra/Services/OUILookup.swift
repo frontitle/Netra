@@ -98,8 +98,10 @@ enum OUILookup {
             || h.contains("appletv") || h.contains("airpods") || h.contains("homepod") {
             return "Apple, Inc."
         }
-        if isLocallyAdministeredMAC(mac), portSet.contains(5353) || portSet.contains(7000) || portSet.contains(5000) {
-            return "Apple, Inc."
+        // LAA（随机/私有 MAC）不能用「单一端口」下结论，避免把通用服务误判成 Apple。
+        if isLocallyAdministeredMAC(mac) {
+            let appleish = applePortEvidence(portSet)
+            if appleish >= 2 { return "Apple, Inc." }
         }
         return nil
     }
@@ -110,13 +112,27 @@ enum OUILookup {
     }
 
     private static func isApplePortSignature(_ ports: Set<Int>) -> Bool {
-        ports.contains(7000) || ports.contains(5000) || ports.contains(548) || ports.contains(5900) || ports.contains(62078)
+        // 端口只是“证据”，不要包含过于泛化的 5000（很多设备/服务都会用）。
+        // 更偏 Apple 生态的组合：mDNS + AirPlay / iOS sync / AFP / VNC 等。
+        let evidence = applePortEvidence(ports)
+        return evidence >= 2
     }
 
     private static func isLocallyAdministeredMAC(_ mac: String) -> Bool {
         let norm = IPv4Helpers.normalizeMAC(mac)
         guard let first = norm.split(separator: ":").first, let byte = UInt8(first, radix: 16) else { return false }
         return (byte & 0x02) != 0
+    }
+
+    private static func applePortEvidence(_ ports: Set<Int>) -> Int {
+        var score = 0
+        if ports.contains(5353) { score += 1 } // mDNS
+        if ports.contains(7000) { score += 1 } // AirPlay
+        if ports.contains(62078) { score += 1 } // iOS sync/lockdownd
+        if ports.contains(548) { score += 1 } // AFP
+        if ports.contains(5900) { score += 1 } // VNC（macOS 共享屏幕）
+        // 注意：不把 5000 算入 Apple 证据（过于泛化）
+        return score
     }
 
     private static func macKey(_ mac: String) -> String {
@@ -154,6 +170,6 @@ enum OUILookup {
     }
 
     private static func unknownLabel() -> String {
-        "Unknown vendor"
+        "-"
     }
 }

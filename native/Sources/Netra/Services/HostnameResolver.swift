@@ -26,6 +26,7 @@ enum HostnameResolver {
     static func resolve(ip: String, arpHostname: String? = nil) -> String {
         if let name = sanitize(arpHostname) { return name }
         if let name = bonjourOrMDNSName(ip: ip).flatMap(sanitize) { return name }
+        if let name = nbnsName(ip: ip).flatMap(sanitize) { return name }
         if let name = netBIOSName(ip: ip).flatMap(sanitize) { return name }
         if let name = dscacheHost(ip: ip).flatMap(sanitize) { return name }
         if let name = reverseDNS(ip: ip).flatMap(sanitize) { return name }
@@ -85,6 +86,148 @@ enum HostnameResolver {
             }
         }
         return nil
+    }
+
+    /// NBNS (NetBIOS Name Service) 直接查询（对齐 Angry IP Scanner 这类工具的做法之一）。
+    /// 发送 NBSTAT(0x21) 到 UDP/137，解析返回中的第一个 UNIQUE 名称。
+    private static func nbnsName(ip: String) -> String? {
+        guard let addr = IPv4Helpers.parseIPv4(ip) else { return nil }
+        let sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
+        guard sock >= 0 else { return nil }
+        defer { close(sock) }
+
+        var timeout = timeval(tv_sec: 0, tv_usec: 250_000)
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+
+        var dst = sockaddr_in()
+        dst.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        dst.sin_family = sa_family_t(AF_INET)
+        dst.sin_port = in_port_t(137).bigEndian
+        let bytes = addr.rawValue
+        withUnsafeMutableBytes(of: &dst.sin_addr) { ptr in
+            ptr.copyBytes(from: bytes)
+        }
+
+        let txid = UInt16.random(in: 0...UInt16.max)
+        let query = buildNBNSNodeStatusQuery(txid: txid)
+        let sent: Int = query.withUnsafeBytes { ptr in
+            withUnsafePointer(to: &dst) { dstPtr in
+                dstPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
+                    sendto(sock, ptr.baseAddress, ptr.count, 0, sa, socklen_t(MemoryLayout<sockaddr_in>.size))
+                }
+            }
+        }
+        guard sent > 0 else { return nil }
+
+        var buf = [UInt8](repeating: 0, count: 1024)
+        var from = sockaddr_in()
+        var fromLen: socklen_t = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let received: Int = withUnsafeMutablePointer(to: &from) { fromPtr in
+            fromPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
+                recvfrom(sock, &buf, buf.count, 0, sa, &fromLen)
+            }
+        }
+        guard received > 0 else { return nil }
+        return parseNBNSNodeStatusResponse(buf: buf, count: received, txid: txid)
+    }
+
+    private static func buildNBNSNodeStatusQuery(txid: UInt16) -> [UInt8] {
+        // Header (12):
+        // TXID, Flags(0x0000), QDCOUNT=1, ANCOUNT/NSCOUNT/ARCOUNT=0
+        var out: [UInt8] = []
+        out.append(UInt8(txid >> 8)); out.append(UInt8(txid & 0xff))
+        out.append(0x00); out.append(0x00)
+        out.append(0x00); out.append(0x01)
+        out.append(0x00); out.append(0x00)
+        out.append(0x00); out.append(0x00)
+        out.append(0x00); out.append(0x00)
+
+        // QNAME for NBSTAT: "*"
+        // Use NetBIOS encoding of 16-byte name: "*" + 15 spaces.
+        let name16: [UInt8] = [0x2a] + Array(repeating: 0x20, count: 15) // '*' + spaces
+        var encoded: [UInt8] = []
+        encoded.reserveCapacity(32)
+        for b in name16 {
+            let hi = (b >> 4) & 0x0f
+            let lo = b & 0x0f
+            encoded.append(0x41 + hi) // 'A' + nibble
+            encoded.append(0x41 + lo)
+        }
+
+        // label length = 32, then "CK" prefix per RFC1002 representation: "CK" + encoded? (common impl uses 0x20 + encoded only)
+        // Practical: many tools use a single label length 0x20 and the 32 encoded bytes directly.
+        out.append(0x20)
+        out.append(contentsOf: encoded)
+        out.append(0x00) // end of QNAME
+
+        // QTYPE=NBSTAT(0x0021), QCLASS=IN(0x0001)
+        out.append(0x00); out.append(0x21)
+        out.append(0x00); out.append(0x01)
+        return out
+    }
+
+    private static func parseNBNSNodeStatusResponse(buf: [UInt8], count: Int, txid: UInt16) -> String? {
+        guard count >= 12 else { return nil }
+        let rxid = (UInt16(buf[0]) << 8) | UInt16(buf[1])
+        guard rxid == txid else { return nil }
+        // ANCOUNT at bytes 6-7
+        let ancount = (UInt16(buf[6]) << 8) | UInt16(buf[7])
+        guard ancount >= 1 else { return nil }
+
+        var idx = 12
+        // Skip question section name
+        idx = skipDNSName(buf, count, idx)
+        guard idx + 4 <= count else { return nil }
+        idx += 4 // QTYPE/QCLASS
+
+        // Answer section
+        idx = skipDNSName(buf, count, idx)
+        guard idx + 10 <= count else { return nil }
+        _ = (UInt16(buf[idx]) << 8) | UInt16(buf[idx + 1]) // type
+        idx += 2
+        _ = (UInt16(buf[idx]) << 8) | UInt16(buf[idx + 1]) // class
+        idx += 2
+        idx += 4 // ttl
+        let rdlen = Int((UInt16(buf[idx]) << 8) | UInt16(buf[idx + 1]))
+        idx += 2
+        guard idx + rdlen <= count else { return nil }
+
+        // Node status RDATA: first byte = number of names (N), then N * 18 bytes entries
+        guard rdlen >= 1 else { return nil }
+        let n = Int(buf[idx])
+        idx += 1
+        guard n > 0 else { return nil }
+        let entrySize = 18
+        let namesBytes = n * entrySize
+        guard idx + namesBytes <= count else { return nil }
+
+        for i in 0..<n {
+            let off = idx + i * entrySize
+            let nameBytes = Array(buf[off..<(off + 15)])
+            let suffix = buf[off + 15]
+            let flags = (UInt16(buf[off + 16]) << 8) | UInt16(buf[off + 17])
+            let isGroup = (flags & 0x8000) != 0
+            if isGroup { continue }
+            // suffix 0x00=workstation service; 0x20=file server service 等
+            if suffix != 0x00 && suffix != 0x20 { continue }
+            let raw = String(bytes: nameBytes, encoding: .ascii)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if raw.isEmpty { continue }
+            return raw
+        }
+        return nil
+    }
+
+    private static func skipDNSName(_ buf: [UInt8], _ count: Int, _ start: Int) -> Int {
+        var idx = start
+        while idx < count {
+            let len = Int(buf[idx])
+            if len == 0 { return idx + 1 }
+            // compression pointer
+            if (len & 0xC0) == 0xC0 { return idx + 2 }
+            idx += 1 + len
+        }
+        return min(idx, count)
     }
 
     private static func dscacheHost(ip: String) -> String? {
