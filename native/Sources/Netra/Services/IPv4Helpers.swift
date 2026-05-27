@@ -22,34 +22,27 @@ enum IPv4Helpers {
         return uint32ToIPv4(raw) ?? ip
     }
 
-    static func enumerateHosts(network: IPv4Address, cidr: UInt8) -> [IPv4Address] {
+    static func enumerateHosts(network: IPv4Address, cidr: UInt8, maxHosts: Int = 72) -> [IPv4Address] {
         let c = min(max(cidr, 24), 30)
         let hostBits = 32 - Int(c)
         let count = max(0, (1 << hostBits) - 2)
         guard count > 0 else { return [] }
         let base = networkBase(network, cidr: c)
         let baseRaw = ipv4ToUInt32(base)
-        return (1..<(count + 1)).prefix(72).compactMap { offset in
+        return (1..<(count + 1)).prefix(maxHosts).compactMap { offset in
             let value = baseRaw + UInt32(offset)
             return uint32ToIPv4(value)
         }
     }
 
-    static func commonUpstreamSegments(near ip: IPv4Address) -> [(IPv4Address, UInt8)] {
+    static func likelyUpstreamGateway(near ip: IPv4Address) -> IPv4Address? {
         let b = ip.rawValue
-        var candidates: [String] = []
-        if b[0] == 192 && b[1] == 168 {
-            candidates = ["192.168.1.0", "192.168.0.0"]
-        } else if b[0] == 10 {
-            candidates = ["10.0.0.0", "10.0.1.0", "10.1.1.0"]
-        } else if b[0] == 172 && (16...31).contains(b[1]) {
-            candidates = ["172.\(b[1]).0.0", "172.\(b[1]).1.0"]
-        }
-        let current = segmentID(for: ip)
-        return candidates.compactMap { text in
-            guard let base = parseIPv4(text), segmentID(for: base) != current else { return nil }
-            return (base, 24)
-        }
+        guard isScannable(ip), b[2] != 1 else { return nil }
+        return parseIPv4("\(b[0]).\(b[1]).1.1")
+    }
+
+    static func segmentBase(containing ip: IPv4Address) -> IPv4Address {
+        networkBase(ip, cidr: 24)
     }
 
     static func ipv4ToUInt32(_ ip: IPv4Address) -> UInt32 {

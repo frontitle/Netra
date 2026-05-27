@@ -16,6 +16,24 @@ enum LANScanner {
         let tailscale = TailscaleService.detect(primaryIP: interface.ip)
         let tailscaleRemote = Set(tailscale?.remoteSubnets ?? [])
 
+        let primaryCandidate = [(IPv4Helpers.networkBase(localIP, cidr: interface.cidr), min(max(interface.cidr, 24), 30))]
+        let primaryTargets = collectPingTargets(primaryCandidate, maxPerSegment: 254, maxTotal: 254)
+        let primaryReachable = PingService.sweepReachable(primaryTargets.map { IPv4Helpers.ipv4String($0) })
+        if ScanCancellation.shared.isCancelled { return cancelledResult(interface: interface) }
+        Thread.sleep(forTimeInterval: 0.08)
+        arpEntries = ARPService.readAll()
+        emitFastLocalDevices(
+            ips: fastLocalIPs(
+                localIP: localIP,
+                gateway: interface.gateway,
+                arpEntries: arpEntries,
+                reachable: primaryReachable
+            ),
+            interface: interface,
+            arpEntries: arpEntries,
+            onDeviceFound: onDeviceFound
+        )
+
         var candidates = discoverCandidateSegments(
             interface: interface,
             routeGateways: routeGateways,
@@ -25,10 +43,12 @@ enum LANScanner {
             routeHops: routeHops,
             tailscaleRemote: tailscaleRemote
         )
-        var scannedSegmentKeys = Set(candidates.map { segKey($0.0, $0.1) })
-        let initialTargets = collectPingTargets(candidates)
+        var scannedSegmentKeys = Set(primaryCandidate.map { segKey($0.0, $0.1) })
+        let deferredCandidates = candidates.filter { !scannedSegmentKeys.contains(segKey($0.0, $0.1)) }
+        let initialTargets = collectPingTargets(deferredCandidates)
         PingService.sweep(initialTargets.map { IPv4Helpers.ipv4String($0) })
-        var udpDiscovered = PortScanner.discoverUDPResponders(ips: initialTargets, ports: IPv4Helpers.udpProbePorts)
+        deferredCandidates.forEach { scannedSegmentKeys.insert(segKey($0.0, $0.1)) }
+        var udpDiscovered = PortScanner.discoverUDPResponders(ips: primaryTargets + initialTargets, ports: IPv4Helpers.udpProbePorts)
         if ScanCancellation.shared.isCancelled { return cancelledResult(interface: interface) }
         Thread.sleep(forTimeInterval: 0.12)
         arpEntries = ARPService.readAll()
@@ -57,6 +77,7 @@ enum LANScanner {
 
         var ips = Set(arpEntries.keys)
         ips.formUnion(udpDiscovered)
+        primaryReachable.compactMap(IPv4Helpers.parseIPv4).forEach { ips.insert($0) }
         ips.insert(localIP)
         if let gw = IPv4Helpers.parseIPv4(interface.gateway) { ips.insert(gw) }
         routeGateways.forEach { ips.insert($0) }
@@ -101,6 +122,17 @@ enum LANScanner {
             onDeviceFound?(device)
             devices.append(device)
         }
+
+        discoverLikelyUpstream(
+            near: localIP,
+            knownIPs: &ips,
+            devices: &devices,
+            arpEntries: &arpEntries,
+            interface: interface,
+            ports: ports,
+            tailscaleRemote: tailscaleRemote,
+            onDeviceFound: onDeviceFound
+        )
 
         var binding = GatewayService.discoverBinding(
             defaultGateway: interface.gateway,
@@ -199,6 +231,111 @@ enum LANScanner {
         }
     }
 
+    private static func fastLocalIPs(
+        localIP: IPv4Address,
+        gateway: String,
+        arpEntries: [IPv4Address: ArpEntry],
+        reachable: Set<String>
+    ) -> [IPv4Address] {
+        let primarySegment = IPv4Helpers.segmentID(for: localIP)
+        var ips = Set<IPv4Address>()
+        for (ip, _) in arpEntries where IPv4Helpers.segmentID(for: ip) == primarySegment {
+            ips.insert(ip)
+        }
+        reachable.compactMap(IPv4Helpers.parseIPv4).forEach { ip in
+            if IPv4Helpers.segmentID(for: ip) == primarySegment { ips.insert(ip) }
+        }
+        ips.insert(localIP)
+        if let gw = IPv4Helpers.parseIPv4(gateway), IPv4Helpers.segmentID(for: gw) == primarySegment {
+            ips.insert(gw)
+        }
+        return ips.sorted { IPv4Helpers.ipv4ToUInt32($0) < IPv4Helpers.ipv4ToUInt32($1) }
+    }
+
+    private static func emitFastLocalDevices(
+        ips: [IPv4Address],
+        interface: NetworkInterface,
+        arpEntries: [IPv4Address: ArpEntry],
+        onDeviceFound: ((LanDevice) -> Void)?
+    ) {
+        guard let onDeviceFound else { return }
+        for ip in ips where IPv4Helpers.isValidHost(ip) {
+            let ipStr = IPv4Helpers.ipv4String(ip)
+            let arp = arpEntries[ip]
+            let mac = arp?.mac ?? "扫描中…"
+            let hostname = arp?.hostname ?? "扫描中…"
+            let role = ipStr == interface.gateway ? "网关 / 识别中…" : "扫描中…"
+            onDeviceFound(LanDevice(
+                ip: ipStr,
+                mac: mac,
+                vendor: "扫描中…",
+                hostname: hostname,
+                localDNS: "—",
+                os: "Unknown",
+                role: role,
+                segment: IPv4Helpers.segmentID(for: ip),
+                ports: [],
+                isOnline: true
+            ))
+        }
+    }
+
+    private static func discoverLikelyUpstream(
+        near localIP: IPv4Address,
+        knownIPs: inout Set<IPv4Address>,
+        devices: inout [LanDevice],
+        arpEntries: inout [IPv4Address: ArpEntry],
+        interface: NetworkInterface,
+        ports: [UInt16],
+        tailscaleRemote: Set<String>,
+        onDeviceFound: ((LanDevice) -> Void)?
+    ) {
+        guard let gateway = IPv4Helpers.likelyUpstreamGateway(near: localIP) else { return }
+        let gatewayIP = IPv4Helpers.ipv4String(gateway)
+        guard !knownIPs.contains(gateway), PingService.stats(target: gatewayIP, label: gatewayIP, count: 1).packetLoss < 100 else {
+            return
+        }
+        let upstreamSegment = IPv4Helpers.segmentBase(containing: gateway)
+        let targets = collectPingTargets([(upstreamSegment, 24)], maxPerSegment: 254, maxTotal: 254)
+        let reachable = PingService.sweepReachable(targets.map { IPv4Helpers.ipv4String($0) })
+        Thread.sleep(forTimeInterval: 0.08)
+        let upstreamARP = ARPService.readAll()
+        for (ip, entry) in upstreamARP { arpEntries[ip] = entry }
+
+        var extraIPs = Set<IPv4Address>()
+        extraIPs.insert(gateway)
+        reachable.compactMap(IPv4Helpers.parseIPv4).forEach { extraIPs.insert($0) }
+        upstreamARP.keys.forEach { extraIPs.insert($0) }
+        for ip in extraIPs.sorted(by: { IPv4Helpers.ipv4ToUInt32($0) < IPv4Helpers.ipv4ToUInt32($1) }) {
+            if knownIPs.contains(ip) || !IPv4Helpers.isValidHost(ip) { continue }
+            let segment = IPv4Helpers.segmentID(for: ip)
+            if TailscaleService.isRemoteSegment(segment, remote: tailscaleRemote) { continue }
+            let ipStr = IPv4Helpers.ipv4String(ip)
+            let arp = arpEntries[ip]
+            let mac = arp?.mac ?? "未知"
+            let hostname = DeviceInference.hostname(from: arp?.hostname, ip: ipStr)
+            var openPorts = PortScanner.scanTCP(ip: ip, ports: ports)
+            openPorts.append(contentsOf: PortScanner.scanUDP(ip: ip, ports: IPv4Helpers.udpProbePorts))
+            let vendor = OUILookup.vendor(for: mac, hostname: hostname, ports: openPorts)
+            let os = DeviceInference.inferOS(ports: openPorts, vendor: vendor, mac: mac)
+            let role = DeviceInference.inferRole(ip: ipStr, localIP: interface.ip, gateway: interface.gateway, vendor: vendor, ports: openPorts)
+            let device = LanDevice(
+                ip: ipStr,
+                mac: mac,
+                vendor: vendor,
+                hostname: hostname,
+                localDNS: DeviceInference.localDNS(hostname: hostname, ip: ipStr),
+                os: os,
+                role: role,
+                segment: segment,
+                ports: openPorts
+            )
+            knownIPs.insert(ip)
+            onDeviceFound?(device)
+            devices.append(device)
+        }
+    }
+
     private static func discoverCandidateSegments(
         interface: NetworkInterface,
         routeGateways: Set<IPv4Address>,
@@ -219,14 +356,6 @@ enum LANScanner {
         }
         if let local = IPv4Helpers.parseIPv4(interface.ip) {
             insert(local, interface.cidr)
-            for (network, cidr) in IPv4Helpers.commonUpstreamSegments(near: local) {
-                insert(network, cidr)
-            }
-        }
-        if let gateway = IPv4Helpers.parseIPv4(interface.gateway) {
-            for (network, cidr) in IPv4Helpers.commonUpstreamSegments(near: gateway) {
-                insert(network, cidr)
-            }
         }
         for (_, seg) in routeSegments {
             let prefix = min(max(seg.1, 16), 24)
@@ -247,12 +376,16 @@ enum LANScanner {
         return Array(result.prefix(12))
     }
 
-    private static func collectPingTargets(_ segments: [(IPv4Address, UInt8)]) -> [IPv4Address] {
+    private static func collectPingTargets(
+        _ segments: [(IPv4Address, UInt8)],
+        maxPerSegment: Int = 72,
+        maxTotal: Int = 240
+    ) -> [IPv4Address] {
         var targets = Set<IPv4Address>()
         for (network, cidr) in segments {
-            for ip in IPv4Helpers.enumerateHosts(network: network, cidr: cidr) where IPv4Helpers.isValidHost(ip) {
+            for ip in IPv4Helpers.enumerateHosts(network: network, cidr: cidr, maxHosts: maxPerSegment) where IPv4Helpers.isValidHost(ip) {
                 targets.insert(ip)
-                if targets.count >= 240 { return Array(targets) }
+                if targets.count >= maxTotal { return Array(targets) }
             }
         }
         return Array(targets)

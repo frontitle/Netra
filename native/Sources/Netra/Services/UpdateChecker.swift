@@ -3,6 +3,7 @@ import Foundation
 struct ReleaseInfo: Equatable {
     var version: String
     var url: URL
+    var assetURL: URL?
 }
 
 enum UpdateChecker {
@@ -11,6 +12,13 @@ enum UpdateChecker {
         var html_url: String
         var draft: Bool?
         var prerelease: Bool?
+        var assets: [GitHubAsset]?
+    }
+
+    private struct GitHubAsset: Decodable {
+        var name: String
+        var browser_download_url: String
+        var content_type: String?
     }
 
     /// 取仓库最新已发布 Release（含 prerelease/beta；GitHub `/releases/latest` 会忽略 prerelease）。
@@ -25,10 +33,14 @@ enum UpdateChecker {
             let releases = try JSONDecoder().decode([GitHubRelease].self, from: data)
             guard let release = releases.first(where: { $0.draft != true }) else { return nil }
             guard let page = URL(string: release.html_url) else { return nil }
+            let asset = release.assets?.first { asset in
+                let name = asset.name.lowercased()
+                return name.hasSuffix(".zip") && name.contains("netra")
+            }.flatMap { URL(string: $0.browser_download_url) }
             let version = release.tag_name
                 .trimmingCharacters(in: .whitespaces)
                 .replacingOccurrences(of: "^v", with: "", options: .regularExpression)
-            return ReleaseInfo(version: version, url: page)
+            return ReleaseInfo(version: version, url: page, assetURL: asset)
         } catch {
             return nil
         }

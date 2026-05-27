@@ -158,7 +158,27 @@ struct DeviceTableView: NSViewRepresentable {
             let col = DeviceTableColumn(rawValue: id),
             row < sorted.count else { return nil }
       let device = sorted[row]
-      let textField = NSTextField(labelWithString: value(device, col: col))
+      let value = value(device, col: col)
+      if isLoadingValue(value) {
+        let stack = NSStackView()
+        stack.orientation = .horizontal
+        stack.spacing = 6
+        stack.alignment = .centerY
+        let spinner = NSProgressIndicator()
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        spinner.startAnimation(nil)
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        spinner.widthAnchor.constraint(equalToConstant: 14).isActive = true
+        spinner.heightAnchor.constraint(equalToConstant: 14).isActive = true
+        let label = NSTextField(labelWithString: value)
+        label.font = .systemFont(ofSize: 13)
+        label.textColor = .secondaryLabelColor
+        stack.addArrangedSubview(spinner)
+        stack.addArrangedSubview(label)
+        return stack
+      }
+      let textField = NSTextField(labelWithString: value)
       textField.lineBreakMode = .byTruncatingTail
       textField.font = col == .ip || col == .ports ? .monospacedSystemFont(ofSize: 12, weight: .regular) : .systemFont(ofSize: 13)
       textField.textColor = device.isOnline ? .labelColor : .secondaryLabelColor
@@ -203,6 +223,10 @@ struct DeviceTableView: NSViewRepresentable {
         if device.ports.isEmpty { return "—" }
         return device.ports.map { String($0.port) }.joined(separator: ", ")
       }
+    }
+
+    private func isLoadingValue(_ value: String) -> Bool {
+      value.contains("扫描中") || value.contains("识别中")
     }
   }
 }

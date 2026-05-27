@@ -106,7 +106,9 @@ final class AppPreferences: ObservableObject {
     @Published var updateAvailable = false
     @Published var latestReleaseVersion: String?
     @Published var latestReleaseURL: URL?
+    @Published var latestReleaseAssetURL: URL?
     @Published var isCheckingUpdate = false
+    @Published var isInstallingUpdate = false
     @Published var lastUpdateCheckMessage = ""
 
     var themeColors: ThemeColors { accent.theme }
@@ -154,12 +156,28 @@ final class AppPreferences: ObservableObject {
         }
         latestReleaseVersion = release.version
         latestReleaseURL = release.url
+        latestReleaseAssetURL = release.assetURL
         let newer = AppVersion.isRemoteNewer(remote: release.version, than: AppVersion.short)
         updateAvailable = newer
         if userInitiated {
             lastUpdateCheckMessage = newer
                 ? String(format: l10n(.updateAvailableFormat), release.version)
                 : l10n(.upToDate)
+        }
+    }
+
+    func installLatestUpdate() async {
+        guard let assetURL = latestReleaseAssetURL else {
+            lastUpdateCheckMessage = l10n(.updateInstallUnavailable)
+            return
+        }
+        isInstallingUpdate = true
+        defer { isInstallingUpdate = false }
+        do {
+            try await UpdateInstaller.installAndRelaunch(assetURL: assetURL)
+            lastUpdateCheckMessage = l10n(.updateInstallStarted)
+        } catch {
+            lastUpdateCheckMessage = error.localizedDescription
         }
     }
 

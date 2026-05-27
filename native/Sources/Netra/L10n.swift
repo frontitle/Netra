@@ -38,9 +38,13 @@ enum L10nKey: String, CaseIterable {
     case buildNumber
     case checkUpdates
     case checkingUpdates
+    case installUpdate
+    case installingUpdate
     case updateAvailableFormat
     case upToDate
     case updateCheckFailed
+    case updateInstallUnavailable
+    case updateInstallStarted
     case openReleases
     case viewOnGitHub
     case aboutDescription
@@ -167,9 +171,13 @@ enum L10n {
         .buildNumber: "构建号",
         .checkUpdates: "检查更新",
         .checkingUpdates: "检查中…",
+        .installUpdate: "安装并重启",
+        .installingUpdate: "安装中…",
         .updateAvailableFormat: "发现新版本 %@",
         .upToDate: "当前已是最新版本",
         .updateCheckFailed: "暂时无法检查更新，请稍后重试",
+        .updateInstallUnavailable: "此版本没有可自动安装的更新包，请打开下载页手动安装",
+        .updateInstallStarted: "正在安装更新并重启",
         .openReleases: "打开下载页",
         .viewOnGitHub: "在 GitHub 查看",
         .aboutDescription: "Netra 是专为 macOS 打造的专业局域网扫描与网络拓扑工具。可实时发现设备、可视化多层路由路径，并对网络中每个节点进行深度检视。",
@@ -284,9 +292,13 @@ enum L10n {
         .buildNumber: "Build",
         .checkUpdates: "Check for Updates",
         .checkingUpdates: "Checking…",
+        .installUpdate: "Install & Relaunch",
+        .installingUpdate: "Installing…",
         .updateAvailableFormat: "New version %@ available",
         .upToDate: "You're up to date",
         .updateCheckFailed: "Could not check for updates. Try again later.",
+        .updateInstallUnavailable: "This release has no auto-installable package. Open Releases to install manually.",
+        .updateInstallStarted: "Installing update and relaunching",
         .openReleases: "Open Releases",
         .viewOnGitHub: "View on GitHub",
         .aboutDescription: "Netra is a professional LAN scanning and network topology tool built exclusively for macOS. It discovers devices in real time, visualizes multi-layer routing paths, and provides deep inspection of every node on your network.",

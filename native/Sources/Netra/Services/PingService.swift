@@ -2,9 +2,14 @@ import Foundation
 
 enum PingService {
     static func sweep(_ ips: [String]) {
+        _ = sweepReachable(ips)
+    }
+
+    static func sweepReachable(_ ips: [String]) -> Set<String> {
         let group = DispatchGroup()
         let lock = NSLock()
         var pending = 0
+        var reachable = Set<String>()
         for ip in ips {
             if ScanCancellation.shared.isCancelled { break }
             group.enter()
@@ -13,7 +18,12 @@ enum PingService {
             let shouldWait = pending >= 24
             lock.unlock()
             DispatchQueue.global(qos: .utility).async {
-                _ = ShellRunner.run("/sbin/ping", ["-c", "1", "-W", "120", ip])
+                let output = ShellRunner.run("/sbin/ping", ["-c", "1", "-W", "120", ip]) ?? ""
+                if isReachablePingOutput(output) {
+                    lock.lock()
+                    reachable.insert(ip)
+                    lock.unlock()
+                }
                 group.leave()
             }
             if shouldWait {
@@ -24,6 +34,7 @@ enum PingService {
             }
         }
         group.wait()
+        return reachable
     }
 
     static func stats(target: String, label: String, count: UInt8 = 2) -> PingStats {
@@ -55,5 +66,13 @@ enum PingService {
             target: target, label: label, avgMs: avg, minMs: minV, maxMs: maxV,
             jitterMs: jitter, packetLoss: loss, status: status, measuredAt: Date()
         )
+    }
+
+    private static func isReachablePingOutput(_ output: String) -> Bool {
+        for line in output.split(separator: "\n") {
+            let row = String(line)
+            if row.contains("bytes from") || row.contains("0.0% packet loss") { return true }
+        }
+        return false
     }
 }

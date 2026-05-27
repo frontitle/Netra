@@ -100,6 +100,11 @@ struct SettingsView: View {
                 .buttonStyle(FuturisticButtonStyle(prominent: true))
                 .disabled(prefs.isCheckingUpdate)
                 if prefs.updateAvailable {
+                    Button(prefs.isInstallingUpdate ? prefs.l10n(.installingUpdate) : prefs.l10n(.installUpdate)) {
+                        Task { await prefs.installLatestUpdate() }
+                    }
+                    .buttonStyle(FuturisticButtonStyle(prominent: true))
+                    .disabled(prefs.isInstallingUpdate || prefs.latestReleaseAssetURL == nil)
                     Button(prefs.l10n(.openReleases)) { openReleases() }
                         .buttonStyle(FuturisticButtonStyle())
                 }
