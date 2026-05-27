@@ -31,6 +31,12 @@ enum PingService {
         var avg = 0.0, minV = 0.0, maxV = 0.0, loss = 100.0
         for line in output.split(separator: "\n") {
             let row = String(line)
+            if row.contains("time="), avg == 0,
+               let value = row.components(separatedBy: "time=").dropFirst().first?
+                .split(whereSeparator: { !"0123456789.".contains($0) }).first,
+               let ms = Double(value) {
+                minV = ms; avg = ms; maxV = ms
+            }
             if row.contains("round-trip") || row.contains("avg") {
                 let nums = row.split(whereSeparator: { !"0123456789./".contains($0) })
                     .compactMap { Double($0) }

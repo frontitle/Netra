@@ -3,9 +3,9 @@ import Network
 
 enum IPv4Helpers {
     static let defaultScanPorts: [UInt16] = [
-        22, 53, 80, 139, 443, 445, 548, 554, 5000, 5001, 7000, 8000, 8001, 8080, 8081, 8181, 8443, 9000, 631, 5900, 5353,
+        22, 53, 80, 139, 443, 445, 548, 554, 5000, 5001, 7000, 8000, 8001, 8080, 8081, 8181, 8443, 9000, 631, 5900, 5353, 62078,
     ]
-    static let udpProbePorts: [UInt16] = [53, 123, 137, 1900]
+    static let udpProbePorts: [UInt16] = [53, 123, 137, 1900, 5353]
 
     static func parseIPv4(_ text: String) -> IPv4Address? {
         IPv4Address(text.trimmingCharacters(in: .whitespaces))
@@ -32,6 +32,23 @@ enum IPv4Helpers {
         return (1..<(count + 1)).prefix(72).compactMap { offset in
             let value = baseRaw + UInt32(offset)
             return uint32ToIPv4(value)
+        }
+    }
+
+    static func commonUpstreamSegments(near ip: IPv4Address) -> [(IPv4Address, UInt8)] {
+        let b = ip.rawValue
+        var candidates: [String] = []
+        if b[0] == 192 && b[1] == 168 {
+            candidates = ["192.168.1.0", "192.168.0.0"]
+        } else if b[0] == 10 {
+            candidates = ["10.0.0.0", "10.0.1.0", "10.1.1.0"]
+        } else if b[0] == 172 && (16...31).contains(b[1]) {
+            candidates = ["172.\(b[1]).0.0", "172.\(b[1]).1.0"]
+        }
+        let current = segmentID(for: ip)
+        return candidates.compactMap { text in
+            guard let base = parseIPv4(text), segmentID(for: base) != current else { return nil }
+            return (base, 24)
         }
     }
 

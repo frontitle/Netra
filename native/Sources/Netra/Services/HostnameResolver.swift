@@ -24,17 +24,17 @@ enum HostnameResolver {
     }
 
     static func resolve(ip: String, arpHostname: String? = nil) -> String {
-        if let name = sanitize(arpHostname) { return name }
-        if let name = bonjourOrMDNSName(ip: ip).flatMap(sanitize) { return name }
-        if let name = nbnsName(ip: ip).flatMap(sanitize) { return name }
-        if let name = netBIOSName(ip: ip).flatMap(sanitize) { return name }
-        if let name = dscacheHost(ip: ip).flatMap(sanitize) { return name }
-        if let name = reverseDNS(ip: ip).flatMap(sanitize) { return name }
+        if let name = sanitize(arpHostname, ip: ip) { return name }
+        if let name = bonjourOrMDNSName(ip: ip).flatMap({ sanitize($0, ip: ip) }) { return name }
+        if let name = nbnsName(ip: ip).flatMap({ sanitize($0, ip: ip) }) { return name }
+        if let name = netBIOSName(ip: ip).flatMap({ sanitize($0, ip: ip) }) { return name }
+        if let name = dscacheHost(ip: ip).flatMap({ sanitize($0, ip: ip) }) { return name }
+        if let name = reverseDNS(ip: ip).flatMap({ sanitize($0, ip: ip) }) { return name }
         if let name = refreshedARPName(ip: ip) { return name }
         return "—"
     }
 
-    private static func sanitize(_ raw: String?) -> String? {
+    private static func sanitize(_ raw: String?, ip: String? = nil) -> String? {
         guard var name = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return nil }
         if name == "?" || name == "(null)" || name == "—" { return nil }
         if name.lowercased().hasPrefix("host-") { return nil }
@@ -43,7 +43,20 @@ enum HostnameResolver {
         if name.contains("\\") {
             name = name.split(separator: "\\").last.map(String.init) ?? name
         }
+        if let ip, isSyntheticDNSName(name, ip: ip) { return nil }
         return name.isEmpty ? nil : name
+    }
+
+    private static func isSyntheticDNSName(_ name: String, ip: String) -> Bool {
+        let lower = name.lowercased()
+        let octets = ip.split(separator: ".").map(String.init)
+        let dashed = octets.joined(separator: "-")
+        let dotted = octets.joined(separator: ".")
+        let compact = octets.joined()
+        if lower == ip || lower.contains(dashed) || lower.contains(dotted) || lower.contains(compact) { return true }
+        if lower.hasPrefix("ip-") || lower.hasPrefix("ip") && lower.dropFirst(2).allSatisfy({ $0.isNumber || $0 == "-" }) { return true }
+        if lower.hasSuffix(".in-addr.arpa") { return true }
+        return false
     }
 
     /// Bonjour / mDNS 反向解析（依赖系统 mDNSResponder，ping 后更易成功）。
@@ -256,6 +269,6 @@ enum HostnameResolver {
     private static func refreshedARPName(ip: String) -> String? {
         guard let addr = IPv4Helpers.parseIPv4(ip) else { return nil }
         guard let entry = ARPService.readAll()[addr] else { return nil }
-        return sanitize(entry.hostname)
+        return sanitize(entry.hostname, ip: ip)
     }
 }

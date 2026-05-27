@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 /// 路由节点实时延迟迷你图。
 struct LivePingView: View {
@@ -17,11 +18,11 @@ struct LivePingView: View {
                         .frame(width: 6, height: 6)
                         .scaleEffect(pulse ? 1.35 : 0.85)
                         .animation(.easeInOut(duration: 0.55), value: pulse)
-                    Text("\(Int(stats.avgMs)) ms")
+                    Text(pingText(stats))
                         .font(.caption.monospacedDigit().weight(.semibold))
                         .monospacedDigit()
                         .id("ping-ms-\(tick)-\(stats.target)")
-                    Text("±\(Int(stats.jitterMs))")
+                    Text(jitterText(stats))
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
@@ -59,5 +60,17 @@ struct LivePingView: View {
         case .bad: return .red
         case .down: return .gray
         }
+    }
+
+    private func pingText(_ stats: PingStats) -> String {
+        if stats.packetLoss >= 100 { return "超时" }
+        if stats.avgMs < 10 { return String(format: "%.1f ms", stats.avgMs) }
+        return "\(Int(stats.avgMs.rounded())) ms"
+    }
+
+    private func jitterText(_ stats: PingStats) -> String {
+        if stats.packetLoss >= 100 { return "loss 100%" }
+        if stats.jitterMs < 10 { return String(format: "±%.1f", stats.jitterMs) }
+        return "±\(Int(stats.jitterMs.rounded()))"
     }
 }

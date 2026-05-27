@@ -26,7 +26,9 @@ enum LANScanner {
             tailscaleRemote: tailscaleRemote
         )
         var scannedSegmentKeys = Set(candidates.map { segKey($0.0, $0.1) })
-        PingService.sweep(collectPingTargets(candidates).map { IPv4Helpers.ipv4String($0) })
+        let initialTargets = collectPingTargets(candidates)
+        PingService.sweep(initialTargets.map { IPv4Helpers.ipv4String($0) })
+        var udpDiscovered = PortScanner.discoverUDPResponders(ips: initialTargets, ports: IPv4Helpers.udpProbePorts)
         if ScanCancellation.shared.isCancelled { return cancelledResult(interface: interface) }
         Thread.sleep(forTimeInterval: 0.12)
         arpEntries = ARPService.readAll()
@@ -46,12 +48,15 @@ enum LANScanner {
                 }
             }
             candidates.append(contentsOf: extra)
-            PingService.sweep(collectPingTargets(extra).map { IPv4Helpers.ipv4String($0) })
+            let extraTargets = collectPingTargets(extra)
+            PingService.sweep(extraTargets.map { IPv4Helpers.ipv4String($0) })
+            udpDiscovered.formUnion(PortScanner.discoverUDPResponders(ips: extraTargets, ports: IPv4Helpers.udpProbePorts))
             Thread.sleep(forTimeInterval: 0.12)
             arpEntries = ARPService.readAll()
         }
 
         var ips = Set(arpEntries.keys)
+        ips.formUnion(udpDiscovered)
         ips.insert(localIP)
         if let gw = IPv4Helpers.parseIPv4(interface.gateway) { ips.insert(gw) }
         routeGateways.forEach { ips.insert($0) }
@@ -214,6 +219,14 @@ enum LANScanner {
         }
         if let local = IPv4Helpers.parseIPv4(interface.ip) {
             insert(local, interface.cidr)
+            for (network, cidr) in IPv4Helpers.commonUpstreamSegments(near: local) {
+                insert(network, cidr)
+            }
+        }
+        if let gateway = IPv4Helpers.parseIPv4(interface.gateway) {
+            for (network, cidr) in IPv4Helpers.commonUpstreamSegments(near: gateway) {
+                insert(network, cidr)
+            }
         }
         for (_, seg) in routeSegments {
             let prefix = min(max(seg.1, 16), 24)
