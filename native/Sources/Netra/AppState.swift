@@ -47,6 +47,7 @@ final class AppState: ObservableObject {
     @Published var tableSortAscending = true
     @Published var qualityWatch: [String] = []
     @Published var showOfflineDevices = UserDefaults.standard.bool(forKey: "netra.showOfflineDevices")
+    @Published var rescanningDeviceIP: String?
 
     private var pingLoopTask: Task<Void, Never>?
     private var ouiObserver: NSObjectProtocol?
@@ -116,6 +117,10 @@ final class AppState: ObservableObject {
     func runFullScan() async {
         isScanning = true
         errorMessage = ""
+        if let current = try? NetworkInterfaceService.currentInterface(),
+           let local = IPv4Helpers.parseIPv4(current.ip) {
+            KnownDevicesStore.shared.clear(segment: IPv4Helpers.segmentID(for: local))
+        }
         devices = []
         lanResult = nil
         selectedDevice = nil
@@ -176,6 +181,39 @@ final class AppState: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func rescanDevice(_ device: LanDevice) async {
+        rescanningDeviceIP = device.ip
+        defer { rescanningDeviceIP = nil }
+        do {
+            let refreshed = try await Task.detached(priority: .userInitiated) {
+                try LANScanner.scanDevice(ip: device.ip)
+            }.value
+            upsertDevice(refreshed)
+            if var lan = lanResult {
+                if let idx = lan.devices.firstIndex(where: { $0.ip == refreshed.ip }) {
+                    lan.devices[idx] = refreshed
+                } else {
+                    lan.devices.append(refreshed)
+                }
+                lanResult = lan
+            }
+            selectedDevice = refreshed
+            KnownDevicesStore.shared.applyScan(devices)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func closeDeviceInspector() {
+        selectedDevice = nil
+    }
+
+    func clearHistory() {
+        snapshots = []
+        UserDefaults.standard.removeObject(forKey: snapshotsKey)
+        UserDefaults.standard.removeObject(forKey: "ipfinder.native.scanHistory")
     }
 
     func openPort(ip: String, port: Int) {

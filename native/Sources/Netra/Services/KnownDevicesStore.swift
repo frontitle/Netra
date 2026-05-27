@@ -42,6 +42,11 @@ final class KnownDevicesStore {
         save()
     }
 
+    func clear(segment: String) {
+        records = records.filter { $0.value.segment != segment }
+        save()
+    }
+
     func offlineDevices(excludingOnline onlineIPs: Set<String>) -> [LanDevice] {
         records.values
             .filter { !onlineIPs.contains($0.ip) }

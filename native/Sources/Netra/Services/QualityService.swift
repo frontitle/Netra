@@ -4,7 +4,8 @@ import Network
 enum QualityService {
     static func check(targets: [String]? = nil) throws -> QualityReport {
         let interface = try NetworkInterfaceService.currentInterface()
-        let gateway = PingService.stats(target: interface.gateway == "未知" ? "1.1.1.1" : interface.gateway, label: "Gateway")
+        let gatewayTarget = interface.gateway == "未知" ? "1.1.1.1" : interface.gateway
+        let gateway = PingService.stats(target: gatewayTarget, label: "当前网关")
         let external = ["1.1.1.1", "223.5.5.5", "8.8.8.8"].map { PingService.stats(target: $0, label: $0) }
         let arp = ARPService.readAll()
         var deviceTargets = targets ?? []

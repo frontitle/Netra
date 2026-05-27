@@ -35,7 +35,7 @@ struct QualityView: View {
 
                     sectionLabel(prefs.l10n(.qualityGateway))
                     pingCard(
-                        title: displayLabel(for: q.gateway),
+                        title: prefs.l10n(.qualityCurrentGateway),
                         subtitle: q.gateway.target,
                         stats: app.liveQualityStats(fallback: q.gateway),
                         prominent: true
@@ -118,13 +118,16 @@ struct QualityView: View {
                 statusDot(stats.status)
             }
             HStack(alignment: .lastTextBaseline, spacing: 4) {
-                Text("\(Int(stats.avgMs))")
+                Text(latencyText(stats))
                     .font(.system(prominent ? .title3 : .body, design: .rounded).weight(.bold).monospacedDigit())
                 Text("ms")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                Text("· \(connectivityText(stats))")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(lossColor(stats.status))
                 Spacer()
-                Text("\(Int(stats.packetLoss))%")
+                Text(String(format: prefs.l10n(.qualityConnectivityFormat), connectivityValue(stats)))
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(lossColor(stats.status))
             }
@@ -159,5 +162,19 @@ struct QualityView: View {
         case .warning: return .orange
         case .bad, .down: return .red
         }
+    }
+
+    private func latencyText(_ stats: PingStats) -> String {
+        if stats.packetLoss >= 100 { return "—" }
+        if stats.avgMs < 10 { return String(format: "%.1f", stats.avgMs) }
+        return "\(Int(stats.avgMs.rounded()))"
+    }
+
+    private func connectivityValue(_ stats: PingStats) -> Int {
+        max(0, min(100, Int((100 - stats.packetLoss).rounded())))
+    }
+
+    private func connectivityText(_ stats: PingStats) -> String {
+        "\(connectivityValue(stats))%"
     }
 }

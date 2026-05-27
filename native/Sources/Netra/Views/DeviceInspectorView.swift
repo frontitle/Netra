@@ -47,28 +47,41 @@ struct DeviceInspectorView: View {
     private func header(_ device: LanDevice) -> some View {
         let display = notes.displayName(discovered: device.hostname, ip: device.ip)
         return VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Text(display)
-                    .font(.system(.title2, design: .rounded).weight(.bold))
-                if !device.isOnline {
-                    Text(prefs.l10n(.deviceOffline))
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Text(display)
+                            .font(.system(.title2, design: .rounded).weight(.bold))
+                        if !device.isOnline {
+                            Text(prefs.l10n(.deviceOffline))
+                                .font(.caption)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(.secondary.opacity(0.2), in: Capsule())
+                        }
+                    }
+                    if display != device.hostname, !device.hostname.isEmpty {
+                        Text(String(format: prefs.l10n(.deviceDiscoveredName), device.hostname))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(device.ip)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(theme.accent)
+                    Text(device.mac)
                         .font(.caption)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(.secondary.opacity(0.2), in: Capsule())
+                        .foregroundStyle(.secondary)
                 }
-            }
-            if display != device.hostname, !device.hostname.isEmpty {
-                Text(String(format: prefs.l10n(.deviceDiscoveredName), device.hostname))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Text(device.ip)
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(theme.accent)
-            Text(device.mac)
-                .font(.caption)
+                Spacer()
+                Button {
+                    app.closeDeviceInspector()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
+                .help(prefs.l10n(.inspectorClose))
+            }
         }
     }
 
@@ -141,6 +154,12 @@ struct DeviceInspectorView: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(device.ip, forType: .string)
             }
+            .buttonStyle(FuturisticButtonStyle())
+            Button(app.rescanningDeviceIP == device.ip ? prefs.l10n(.deviceRescanning) : prefs.l10n(.deviceRescan)) {
+                Task { await app.rescanDevice(device) }
+            }
+            .buttonStyle(FuturisticButtonStyle(prominent: true))
+            .disabled(app.rescanningDeviceIP == device.ip)
             Spacer()
         }
     }

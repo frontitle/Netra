@@ -2,6 +2,34 @@ import Foundation
 import Network
 
 enum LANScanner {
+    static func scanDevice(ip ipString: String) throws -> LanDevice {
+        let interface = try NetworkInterfaceService.currentInterface()
+        guard let ip = IPv4Helpers.parseIPv4(ipString), IPv4Helpers.isValidHost(ip) else {
+            throw ScanError.message("IP 无效")
+        }
+        ARPService.refresh(ip: ipString)
+        Thread.sleep(forTimeInterval: 0.08)
+        let arp = ARPService.readAll()[ip]
+        let mac = arp?.mac ?? "未知"
+        let hostname = DeviceInference.hostname(from: arp?.hostname, ip: ipString)
+        var openPorts = PortScanner.scanTCP(ip: ip, ports: IPv4Helpers.defaultScanPorts)
+        openPorts.append(contentsOf: PortScanner.scanUDP(ip: ip, ports: IPv4Helpers.udpProbePorts))
+        let vendor = OUILookup.vendor(for: mac, hostname: hostname, ports: openPorts)
+        let os = DeviceInference.inferOS(ports: openPorts, vendor: vendor, mac: mac)
+        let role = DeviceInference.inferRole(ip: ipString, localIP: interface.ip, gateway: interface.gateway, vendor: vendor, ports: openPorts)
+        return LanDevice(
+            ip: ipString,
+            mac: mac,
+            vendor: vendor,
+            hostname: hostname,
+            localDNS: DeviceInference.localDNS(hostname: hostname, ip: ipString),
+            os: os,
+            role: role,
+            segment: IPv4Helpers.segmentID(for: ip),
+            ports: openPorts
+        )
+    }
+
     static func scan(onDeviceFound: ((LanDevice) -> Void)? = nil) throws -> LanScanResult {
         ScanCancellation.shared.reset()
         let interface = try NetworkInterfaceService.currentInterface()

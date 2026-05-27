@@ -52,6 +52,7 @@ enum L10nKey: String, CaseIterable {
     case newVersionBadge
     case inspectorSelectDevice
     case inspectorHint
+    case inspectorClose
     case metaVendor
     case metaSegment
     case metaRole
@@ -64,6 +65,8 @@ enum L10nKey: String, CaseIterable {
     case qualityNotRun
     case qualityHint
     case qualityGateway
+    case qualityCurrentGateway
+    case qualityConnectivityFormat
     case qualityInternalSample
     case wifiTitle
     case wifiRefresh
@@ -75,6 +78,9 @@ enum L10nKey: String, CaseIterable {
     case copyIP
     case historyTitle
     case historyDeviceCount
+    case historyClear
+    case historyEmpty
+    case historyEmptyHint
     case topologyTitle
     case topologyExpand
     case topologyCollapse
@@ -105,6 +111,8 @@ enum L10nKey: String, CaseIterable {
     case deviceAliasLabel
     case deviceAliasPlaceholder
     case deviceAliasSave
+    case deviceRescan
+    case deviceRescanning
     case deviceDiscoveredName
     case wifiConnected
     case wifiHasPassword
@@ -185,6 +193,7 @@ enum L10n {
         .newVersionBadge: "有新版本",
         .inspectorSelectDevice: "选择一台设备",
         .inspectorHint: "单击列表行查看详情，双击可快速固定选择。",
+        .inspectorClose: "关闭详情",
         .metaVendor: "厂商",
         .metaSegment: "网段",
         .metaRole: "类型",
@@ -197,6 +206,8 @@ enum L10n {
         .qualityNotRun: "尚未检测",
         .qualityHint: "点击「开始检测」测量网关与公网延迟",
         .qualityGateway: "网关",
+        .qualityCurrentGateway: "当前网关",
+        .qualityConnectivityFormat: "连通率 %d%%",
         .qualityInternalSample: "内网抽样",
         .wifiTitle: "附近的 Wi-Fi",
         .wifiRefresh: "刷新",
@@ -208,6 +219,9 @@ enum L10n {
         .copyIP: "复制 IP",
         .historyTitle: "历史记录",
         .historyDeviceCount: "%d 台设备",
+        .historyClear: "清空历史",
+        .historyEmpty: "暂无历史记录",
+        .historyEmptyHint: "完成一次局域网扫描后会在这里显示快照。",
         .topologyTitle: "网络拓扑",
         .topologyExpand: "展开",
         .topologyCollapse: "收起",
@@ -236,6 +250,8 @@ enum L10n {
         .deviceAliasLabel: "备注名称",
         .deviceAliasPlaceholder: "自定义显示名称…",
         .deviceAliasSave: "保存",
+        .deviceRescan: "重新扫描此设备",
+        .deviceRescanning: "扫描中…",
         .deviceDiscoveredName: "发现名称：%@",
         .wifiConnected: "已连接",
         .wifiHasPassword: "需要密码",
@@ -306,6 +322,7 @@ enum L10n {
         .newVersionBadge: "Update available",
         .inspectorSelectDevice: "Select a device",
         .inspectorHint: "Click a row for details; double-click to pin selection.",
+        .inspectorClose: "Close details",
         .metaVendor: "Vendor",
         .metaSegment: "Segment",
         .metaRole: "Role",
@@ -318,6 +335,8 @@ enum L10n {
         .qualityNotRun: "No test yet",
         .qualityHint: "Tap Run Test to measure gateway and internet latency",
         .qualityGateway: "Gateway",
+        .qualityCurrentGateway: "Current gateway",
+        .qualityConnectivityFormat: "Reachability %d%%",
         .qualityInternalSample: "LAN sample",
         .wifiTitle: "Nearby Wi-Fi",
         .wifiRefresh: "Refresh",
@@ -329,6 +348,9 @@ enum L10n {
         .copyIP: "Copy IP",
         .historyTitle: "History",
         .historyDeviceCount: "%d devices",
+        .historyClear: "Clear History",
+        .historyEmpty: "No history yet",
+        .historyEmptyHint: "Snapshots will appear here after a LAN scan.",
         .topologyTitle: "Topology",
         .topologyExpand: "Expand",
         .topologyCollapse: "Collapse",
@@ -357,6 +379,8 @@ enum L10n {
         .deviceAliasLabel: "Display name",
         .deviceAliasPlaceholder: "Custom label…",
         .deviceAliasSave: "Save",
+        .deviceRescan: "Rescan Device",
+        .deviceRescanning: "Scanning…",
         .deviceDiscoveredName: "Discovered: %@",
         .wifiConnected: "Connected",
         .wifiHasPassword: "Password required",
