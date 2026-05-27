@@ -9,14 +9,20 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             AppTheme.background(theme: theme, dark: colorScheme == .dark)
-            NavigationSplitView {
-                sidebar
-            } content: {
-                mainPane
-            } detail: {
-                if showsInspector {
+            if showsInspector {
+                NavigationSplitView {
+                    sidebar
+                } content: {
+                    mainPane
+                } detail: {
                     detailPane
                         .frame(minWidth: 300, idealWidth: 360)
+                }
+            } else {
+                NavigationSplitView {
+                    sidebar
+                } detail: {
+                    mainPane
                 }
             }
         }
