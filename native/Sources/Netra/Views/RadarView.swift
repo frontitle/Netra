@@ -32,7 +32,13 @@ struct RadarView: View {
                 .padding(.bottom, 8)
             DeviceTableView(
                 devices: app.filteredDevices,
-                selection: $app.selectedDevice,
+                selection: Binding(
+                    get: { app.selectedDevice },
+                    set: { newValue in
+                        app.selectedDevice = newValue
+                        app.isDeviceInspectorPresented = newValue != nil
+                    }
+                ),
                 sortColumn: $app.tableSortColumn,
                 sortAscending: $app.tableSortAscending
             )

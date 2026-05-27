@@ -37,12 +37,7 @@ enum LANScanner {
             throw ScanError.message("当前 IP 无效")
         }
         let primarySegment = IPv4Helpers.segmentID(for: localIP)
-        let (routeGateways, routeSegments) = RouteTableService.routeTable()
-        let hostInterfaces = NetworkInterfaceService.parseAllHostInterfaces(primary: interface)
         var arpEntries = ARPService.readAll()
-        let routeHops = RouteTableService.discoverRouteHops()
-        let tailscale = TailscaleService.detect(primaryIP: interface.ip)
-        let tailscaleRemote = Set(tailscale?.remoteSubnets ?? [])
 
         let primaryCandidate = [(IPv4Helpers.networkBase(localIP, cidr: interface.cidr), min(max(interface.cidr, 24), 30))]
         let primaryTargets = collectPingTargets(primaryCandidate, maxPerSegment: 254, maxTotal: 254)
@@ -50,17 +45,24 @@ enum LANScanner {
         if ScanCancellation.shared.isCancelled { return cancelledResult(interface: interface) }
         Thread.sleep(forTimeInterval: 0.08)
         arpEntries = ARPService.readAll()
+        let initialFastIPs = fastLocalIPs(
+            localIP: localIP,
+            gateway: interface.gateway,
+            arpEntries: arpEntries,
+            reachable: primaryReachable
+        )
         emitFastLocalDevices(
-            ips: fastLocalIPs(
-                localIP: localIP,
-                gateway: interface.gateway,
-                arpEntries: arpEntries,
-                reachable: primaryReachable
-            ),
+            ips: initialFastIPs,
             interface: interface,
             arpEntries: arpEntries,
             onDeviceFound: onDeviceFound
         )
+
+        let (routeGateways, routeSegments) = RouteTableService.routeTable()
+        let hostInterfaces = NetworkInterfaceService.parseAllHostInterfaces(primary: interface)
+        let routeHops = RouteTableService.discoverRouteHops()
+        let tailscale = TailscaleService.detect(primaryIP: interface.ip)
+        let tailscaleRemote = Set(tailscale?.remoteSubnets ?? [])
 
         var candidates = discoverCandidateSegments(
             interface: interface,
@@ -288,6 +290,7 @@ enum LANScanner {
     ) {
         guard let onDeviceFound else { return }
         for ip in ips where IPv4Helpers.isValidHost(ip) {
+            if ScanCancellation.shared.isCancelled { break }
             let ipStr = IPv4Helpers.ipv4String(ip)
             let arp = arpEntries[ip]
             let mac = arp?.mac ?? "扫描中…"

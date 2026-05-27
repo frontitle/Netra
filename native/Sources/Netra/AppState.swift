@@ -43,6 +43,7 @@ final class AppState: ObservableObject {
     @Published var roleFilter = ""
     @Published var searchText = ""
     @Published var selectedDevice: LanDevice?
+    @Published var isDeviceInspectorPresented = false
     @Published var tableSortColumn: DeviceTableColumn = .ip
     @Published var tableSortAscending = true
     @Published var qualityWatch: [String] = []
@@ -124,6 +125,7 @@ final class AppState: ObservableObject {
         devices = []
         lanResult = nil
         selectedDevice = nil
+        isDeviceInspectorPresented = false
         segmentFilter = ""
         gatewayPings = [:]
         pingHistory = [:]
@@ -191,6 +193,7 @@ final class AppState: ObservableObject {
                 try LANScanner.scanDevice(ip: device.ip)
             }.value
             upsertDevice(refreshed)
+            isDeviceInspectorPresented = true
             if var lan = lanResult {
                 if let idx = lan.devices.firstIndex(where: { $0.ip == refreshed.ip }) {
                     lan.devices[idx] = refreshed
@@ -207,6 +210,7 @@ final class AppState: ObservableObject {
     }
 
     func closeDeviceInspector() {
+        isDeviceInspectorPresented = false
         selectedDevice = nil
     }
 
@@ -284,12 +288,17 @@ final class AppState: ObservableObject {
     private func upsertDevice(_ device: LanDevice) {
         var online = device
         online.isOnline = true
+        let shouldOpenInspector = selectedDevice?.ip == online.ip
         if let idx = devices.firstIndex(where: { $0.ip == online.ip }) {
             devices[idx] = online
         } else {
             devices.append(online)
         }
         devices.sort { $0.ip.localizedStandardCompare($1.ip) == .orderedAscending }
+        if shouldOpenInspector {
+            selectedDevice = online
+            isDeviceInspectorPresented = true
+        }
     }
 
     func stopPingLoop() {

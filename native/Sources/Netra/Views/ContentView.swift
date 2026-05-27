@@ -9,13 +9,25 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             AppTheme.background(theme: theme, dark: colorScheme == .dark)
-            NavigationSplitView(columnVisibility: .constant(.all)) {
-                sidebar
-            } content: {
-                mainPane
-            } detail: {
-                detailPane
-                    .frame(minWidth: 300, idealWidth: 360)
+            Group {
+                if showsInspector {
+                    NavigationSplitView {
+                        sidebar
+                    } content: {
+                        mainPane
+                    } detail: {
+                        detailPane
+                            .frame(minWidth: 300, idealWidth: 360)
+                    }
+                } else {
+                    NavigationSplitView(columnVisibility: .constant(.doubleColumn)) {
+                        sidebar
+                    } content: {
+                        mainPane
+                    } detail: {
+                        EmptyView()
+                    }
+                }
             }
         }
         .environment(\.theme, prefs.themeColors)
@@ -27,7 +39,19 @@ struct ContentView: View {
             }
             if app.section != .radar {
                 app.selectedDevice = nil
+                app.isDeviceInspectorPresented = false
             }
+        }
+    }
+
+    private var showsInspector: Bool {
+        switch app.section {
+        case .wifi:
+            return app.selectedWifi != nil
+        case .radar:
+            return app.isDeviceInspectorPresented && app.selectedDevice != nil
+        default:
+            return false
         }
     }
 
