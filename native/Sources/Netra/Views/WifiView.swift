@@ -7,69 +7,78 @@ struct WifiView: View {
   @ObservedObject private var location = LocationAuthorizationService.shared
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      PageHeader(prefs.l10n(.wifiTitle), subtitle: wifiSubtitle) {
-        Button {
-          app.refreshWifi()
-        } label: {
-          Label(prefs.l10n(.wifiRefresh), systemImage: "arrow.clockwise")
-        }
-          .buttonStyle(FuturisticButtonStyle())
-          .disabled(!location.canScanWifi)
-      }
-      .padding(.horizontal, 20)
-      .padding(.top, 16)
-
-      if !location.canScanWifi {
-        locationBanner
-          .padding(.horizontal, 20)
-      }
-
-      if location.canScanWifi, app.wifiNetworks.isEmpty {
-        EmptyStateView(
-          icon: "wifi.exclamationmark",
-          title: prefs.l10n(.wifiSelectNetwork),
-          message: prefs.l10n(.wifiInspectorHint)
-        )
-      } else {
-        List(app.wifiNetworks, selection: $app.selectedWifiID) { net in
-          HStack(spacing: 12) {
-            SignalBadge(percent: net.signalPercent, connected: net.isConnected)
-            VStack(alignment: .leading, spacing: 3) {
-              HStack(spacing: 6) {
-                Text(net.ssid.isEmpty ? "—" : net.ssid)
-                  .fontWeight(net.isConnected ? .bold : .regular)
-                  .lineLimit(1)
-                if net.isConnected {
-                  Text(prefs.l10n(.wifiConnected))
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.green)
-                }
-              }
-              if !net.bssid.isEmpty {
-                HStack(spacing: 4) {
-                  Text(net.bssid)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                  CopyIconButton(value: net.bssid, help: prefs.l10n(.copyBSSID))
-                }
-              }
-            }
-            Spacer()
-            Text("\(net.signalPercent)%")
-              .font(.caption.monospacedDigit().weight(.semibold))
-              .foregroundStyle(WifiSignalStyle.color(percent: net.signalPercent))
+    HStack(spacing: 0) {
+      VStack(alignment: .leading, spacing: 12) {
+        PageHeader(prefs.l10n(.wifiTitle), subtitle: wifiSubtitle) {
+          Button {
+            app.refreshWifi()
+          } label: {
+            Label(prefs.l10n(.wifiRefresh), systemImage: "arrow.clockwise")
           }
-          .padding(.vertical, 3)
-          .tag(net.id)
+            .buttonStyle(FuturisticButtonStyle())
+            .disabled(!location.canScanWifi)
         }
-        .listStyle(.inset(alternatesRowBackgrounds: true))
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+
+        if !location.canScanWifi {
+          locationBanner
+            .padding(.horizontal, 20)
+        }
+
+        if location.canScanWifi, app.wifiNetworks.isEmpty {
+          EmptyStateView(
+            icon: "wifi.exclamationmark",
+            title: prefs.l10n(.wifiSelectNetwork),
+            message: prefs.l10n(.wifiInspectorHint)
+          )
+        } else {
+          List(app.wifiNetworks, selection: $app.selectedWifiID) { net in
+            HStack(spacing: 12) {
+              SignalBadge(percent: net.signalPercent, connected: net.isConnected)
+              VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                  Text(net.ssid.isEmpty ? "—" : net.ssid)
+                    .fontWeight(net.isConnected ? .bold : .regular)
+                    .lineLimit(1)
+                  if net.isConnected {
+                    Text(prefs.l10n(.wifiConnected))
+                      .font(.caption2.weight(.semibold))
+                      .foregroundStyle(.green)
+                  }
+                }
+                if !net.bssid.isEmpty {
+                  HStack(spacing: 4) {
+                    Text(net.bssid)
+                      .font(.caption.monospaced())
+                      .foregroundStyle(.secondary)
+                      .lineLimit(1)
+                      .truncationMode(.middle)
+                    CopyIconButton(value: net.bssid, help: prefs.l10n(.copyBSSID))
+                  }
+                }
+              }
+              Spacer()
+              Text("\(net.signalPercent)%")
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .foregroundStyle(WifiSignalStyle.color(percent: net.signalPercent))
+            }
+            .padding(.vertical, 3)
+            .tag(net.id)
+          }
+          .listStyle(.inset(alternatesRowBackgrounds: true))
+        }
+      }
+      .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
+      .padding(.horizontal, 12)
+      .padding(.bottom, 12)
+
+      if app.selectedWifi != nil {
+        Divider()
+        WifiInspectorView(network: app.selectedWifi)
+          .frame(width: 420)
       }
     }
-    .padding(.horizontal, 12)
-    .padding(.bottom, 12)
     .onAppear {
       location.onAuthorized = { app.refreshWifi() }
       location.refreshStatus()

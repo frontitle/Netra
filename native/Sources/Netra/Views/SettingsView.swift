@@ -122,6 +122,14 @@ struct SettingsView: View {
                     }
                         .buttonStyle(FuturisticButtonStyle())
                 }
+                if !prefs.updateAvailable {
+                    Button {
+                        openReleases()
+                    } label: {
+                        Label(prefs.l10n(.openReleases), systemImage: "safari")
+                    }
+                    .buttonStyle(FuturisticButtonStyle())
+                }
                 Button {
                     NSWorkspace.shared.open(AppConfig.repositoryURL)
                 } label: {

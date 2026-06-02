@@ -9,23 +9,11 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             AppTheme.background(theme: theme, dark: colorScheme == .dark)
-            if showsInspector {
-                NavigationSplitView {
-                    sidebar
-                        .navigationSplitViewColumnWidth(min: 220, ideal: 220, max: 220)
-                } content: {
-                    mainPane
-                } detail: {
-                    detailPane
-                        .frame(minWidth: 260, idealWidth: 300, maxWidth: 340)
-                }
-            } else {
-                NavigationSplitView {
-                    sidebar
-                        .navigationSplitViewColumnWidth(min: 220, ideal: 220, max: 220)
-                } detail: {
-                    mainPane
-                }
+            NavigationSplitView {
+                sidebar
+                    .navigationSplitViewColumnWidth(min: 220, ideal: 220, max: 220)
+            } detail: {
+                mainPane
             }
         }
         .environment(\.theme, prefs.themeColors)
@@ -39,26 +27,6 @@ struct ContentView: View {
                 app.selectedDevice = nil
                 app.isDeviceInspectorPresented = false
             }
-        }
-    }
-
-    private var showsInspector: Bool {
-        switch app.section {
-        case .wifi:
-            return app.selectedWifi != nil
-        case .radar:
-            return app.isDeviceInspectorPresented && app.selectedDevice != nil
-        default:
-            return false
-        }
-    }
-
-    @ViewBuilder
-    private var detailPane: some View {
-        if app.section == .wifi {
-            WifiInspectorView(network: app.selectedWifi)
-        } else {
-            DeviceInspectorView(device: app.selectedDevice)
         }
     }
 

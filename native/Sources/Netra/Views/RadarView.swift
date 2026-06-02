@@ -5,45 +5,54 @@ struct RadarView: View {
     @EnvironmentObject private var prefs: AppPreferences
 
     var body: some View {
-        VStack(spacing: 0) {
-            scanHeader
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
-            if !app.errorMessage.isEmpty {
-                Text(app.errorMessage)
-                    .foregroundStyle(.red)
-                    .font(.callout)
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                scanHeader
                     .padding(.horizontal, 20)
-            }
-            if let lan = app.lanResult {
-                TopologyView(
-                    result: lan,
-                    collapsed: $app.topologyCollapsed
+                    .padding(.top, 16)
+                    .padding(.bottom, 12)
+                if !app.errorMessage.isEmpty {
+                    Text(app.errorMessage)
+                        .foregroundStyle(.red)
+                        .font(.callout)
+                        .padding(.horizontal, 20)
+                }
+                if let lan = app.lanResult {
+                    TopologyView(
+                        result: lan,
+                        collapsed: $app.topologyCollapsed
+                    )
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 12)
+                }
+                missingDevicesNotice
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, app.missingDevices.isEmpty ? 0 : 8)
+                filterBar
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
+                DeviceTableView(
+                    devices: app.filteredDevices,
+                    selection: Binding(
+                        get: { app.selectedDevice },
+                        set: { newValue in
+                            app.selectedDevice = newValue
+                            app.isDeviceInspectorPresented = newValue != nil
+                        }
+                    ),
+                    sortColumn: $app.tableSortColumn,
+                    sortAscending: $app.tableSortAscending
                 )
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 12)
                 .padding(.bottom, 12)
             }
-            missingDevicesNotice
-                .padding(.horizontal, 20)
-                .padding(.bottom, app.missingDevices.isEmpty ? 0 : 8)
-            filterBar
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
-            DeviceTableView(
-                devices: app.filteredDevices,
-                selection: Binding(
-                    get: { app.selectedDevice },
-                    set: { newValue in
-                        app.selectedDevice = newValue
-                        app.isDeviceInspectorPresented = newValue != nil
-                    }
-                ),
-                sortColumn: $app.tableSortColumn,
-                sortAscending: $app.tableSortAscending
-            )
-            .padding(.horizontal, 12)
-            .padding(.bottom, 12)
+            .frame(minWidth: 620, maxWidth: .infinity, maxHeight: .infinity)
+
+            if app.isDeviceInspectorPresented, app.selectedDevice != nil {
+                Divider()
+                DeviceInspectorView(device: app.selectedDevice)
+                    .frame(width: 340)
+            }
         }
     }
 

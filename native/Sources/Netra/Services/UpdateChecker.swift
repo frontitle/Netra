@@ -31,7 +31,15 @@ enum UpdateChecker {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { return nil }
             let releases = try JSONDecoder().decode([GitHubRelease].self, from: data)
-            guard let release = releases.first(where: { $0.draft != true }) else { return nil }
+            let candidates = releases
+                .filter { $0.draft != true }
+                .filter { release in
+                    let tag = release.tag_name.lowercased()
+                    return AppConfig.releaseChannelSuffix.isEmpty || tag.contains(AppConfig.releaseChannelSuffix)
+                }
+            guard let release = candidates.max(by: { a, b in
+                AppVersion.compare(a.tag_name, b.tag_name) == .orderedAscending
+            }) else { return nil }
             guard let page = URL(string: release.html_url) else { return nil }
             let asset = release.assets?.first { asset in
                 let name = asset.name.lowercased()
