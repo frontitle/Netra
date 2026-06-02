@@ -94,22 +94,38 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
             HStack(spacing: 12) {
-                Button(prefs.isCheckingUpdate ? prefs.l10n(.checkingUpdates) : prefs.l10n(.checkUpdates)) {
+                Button {
                     Task { await prefs.checkForUpdates(userInitiated: true) }
+                } label: {
+                    Label(
+                        prefs.isCheckingUpdate ? prefs.l10n(.checkingUpdates) : prefs.l10n(.checkUpdates),
+                        systemImage: "arrow.triangle.2.circlepath"
+                    )
                 }
                 .buttonStyle(FuturisticButtonStyle(prominent: true))
                 .disabled(prefs.isCheckingUpdate)
                 if prefs.updateAvailable {
-                    Button(prefs.isInstallingUpdate ? prefs.l10n(.installingUpdate) : prefs.l10n(.installUpdate)) {
+                    Button {
                         Task { await prefs.installLatestUpdate() }
+                    } label: {
+                        Label(
+                            prefs.isInstallingUpdate ? prefs.l10n(.installingUpdate) : prefs.l10n(.installUpdate),
+                            systemImage: "square.and.arrow.down"
+                        )
                     }
                     .buttonStyle(FuturisticButtonStyle(prominent: true))
                     .disabled(prefs.isInstallingUpdate || prefs.latestReleaseAssetURL == nil)
-                    Button(prefs.l10n(.openReleases)) { openReleases() }
+                    Button {
+                        openReleases()
+                    } label: {
+                        Label(prefs.l10n(.openReleases), systemImage: "safari")
+                    }
                         .buttonStyle(FuturisticButtonStyle())
                 }
-                Button(prefs.l10n(.viewOnGitHub)) {
+                Button {
                     NSWorkspace.shared.open(AppConfig.repositoryURL)
+                } label: {
+                    Label(prefs.l10n(.viewOnGitHub), systemImage: "arrow.up.right.square")
                 }
                 .buttonStyle(FuturisticButtonStyle())
             }
@@ -175,7 +191,7 @@ struct SettingsView: View {
             }
             .padding(16)
             .frame(maxWidth: 560, alignment: .leading)
-            .background(AppTheme.glassPanel(cornerRadius: 14, theme: theme))
+            .background(AppTheme.glassPanel(cornerRadius: 8, theme: theme))
         }
     }
 

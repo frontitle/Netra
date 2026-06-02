@@ -15,24 +15,20 @@ struct QualityView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    Text(prefs.l10n(.qualityTitle)).font(.largeTitle.bold())
-                    Spacer()
-                    Button(app.qualityLoading ? prefs.l10n(.qualityRunning) : prefs.l10n(.qualityStart)) {
+                PageHeader(prefs.l10n(.qualityTitle), subtitle: app.quality?.diagnosis) {
+                    Button {
                         Task { await app.runQualityCheck() }
+                    } label: {
+                        Label(
+                            app.qualityLoading ? prefs.l10n(.qualityRunning) : prefs.l10n(.qualityStart),
+                            systemImage: app.qualityLoading ? "waveform.path.ecg" : "play.fill"
+                        )
                     }
                     .buttonStyle(FuturisticButtonStyle(prominent: true))
                     .disabled(app.qualityLoading)
                 }
 
                 if let q = app.quality {
-                    Text(q.diagnosis)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .padding(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
-
                     sectionLabel(prefs.l10n(.qualityGateway))
                     pingCard(
                         title: prefs.l10n(.qualityCurrentGateway),
@@ -67,18 +63,11 @@ struct QualityView: View {
                         }
                     }
                 } else {
-                    VStack(spacing: 10) {
-                        Image(systemName: "waveform.path.ecg")
-                            .font(.system(size: 40))
-                            .foregroundStyle(theme.accent.opacity(0.5))
-                        Text(prefs.l10n(.qualityNotRun)).font(.headline)
-                        Text(prefs.l10n(.qualityHint))
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 48)
+                    EmptyStateView(
+                        icon: "waveform.path.ecg",
+                        title: prefs.l10n(.qualityNotRun),
+                        message: prefs.l10n(.qualityHint)
+                    )
                 }
             }
             .padding(20)
@@ -142,10 +131,10 @@ struct QualityView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             prominent ? theme.accent.opacity(0.08) : Color.white.opacity(0.05),
-            in: RoundedRectangle(cornerRadius: 12)
+            in: RoundedRectangle(cornerRadius: 8)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 8)
                 .stroke(prominent ? theme.accent.opacity(0.35) : Color.white.opacity(0.08), lineWidth: 1)
         )
     }

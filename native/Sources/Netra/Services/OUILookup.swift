@@ -140,7 +140,7 @@ enum OUILookup {
     }
 
     private static func loadResource(_ name: String, into map: inout [String: String]) {
-        guard let url = Bundle.module.url(forResource: name, withExtension: "txt"),
+        guard let url = resourceURL(name: name, extension: "txt"),
               let text = try? String(contentsOf: url, encoding: .utf8) else { return }
         for line in text.split(separator: "\n") {
             let row = String(line).trimmingCharacters(in: .whitespaces)
@@ -159,6 +159,12 @@ enum OUILookup {
             let vendor = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
             if map[key] == nil { map[key] = vendor }
         }
+    }
+
+    private static func resourceURL(name: String, extension ext: String) -> URL? {
+        Bundle.module.url(forResource: name, withExtension: ext)
+            ?? Bundle.main.url(forResource: name, withExtension: ext)
+            ?? Bundle.main.resourceURL?.appendingPathComponent("\(name).\(ext)")
     }
 
     private static func normalizeOUIKey(_ raw: String) -> String {

@@ -34,6 +34,8 @@ mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Resources"
 cp "$BIN" "$STAGE/Contents/MacOS/$BINARY_NAME"
 cp "$NATIVE/Info.plist" "$STAGE/Contents/Info.plist"
 cp "$RESOURCES/master_oui.txt" "$STAGE/Contents/Resources/"
+cp "$RESOURCES/kismet_manuf.txt" "$STAGE/Contents/Resources/"
+find "$NATIVE/.build" -path "*/release/NetraNative_Netra.bundle" -type d -exec cp -R {} "$STAGE/Contents/Resources/" \;
 
 ICON_SRC="$RESOURCES/AppIcon.png"
 if [[ -f "$ICON_SRC" ]]; then

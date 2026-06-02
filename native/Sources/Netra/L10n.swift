@@ -78,7 +78,10 @@ enum L10nKey: String, CaseIterable {
     case copyIP
     case historyTitle
     case historyDeviceCount
+    case historySnapshotCount
     case historyClear
+    case historyClearConfirmTitle
+    case historyClearConfirmBody
     case historyEmpty
     case historyEmptyHint
     case topologyTitle
@@ -106,7 +109,11 @@ enum L10nKey: String, CaseIterable {
     case routerConfirmed
     case routerUnconfirmed
     case pingLive
-    case showOfflineDevices
+    case missingDevicesTitle
+    case missingDevicesHint
+    case missingDevicesCheck
+    case missingDevicesForget
+    case missingDevicesLastSeen
     case deviceOffline
     case deviceAliasLabel
     case deviceAliasPlaceholder
@@ -219,7 +226,10 @@ enum L10n {
         .copyIP: "复制 IP",
         .historyTitle: "历史记录",
         .historyDeviceCount: "%d 台设备",
+        .historySnapshotCount: "%d 条快照",
         .historyClear: "清空历史",
+        .historyClearConfirmTitle: "清空所有历史记录？",
+        .historyClearConfirmBody: "这会移除所有扫描快照，但不会影响当前扫描结果。",
         .historyEmpty: "暂无历史记录",
         .historyEmptyHint: "完成一次局域网扫描后会在这里显示快照。",
         .topologyTitle: "网络拓扑",
@@ -245,7 +255,11 @@ enum L10n {
         .routerConfirmed: "已确认",
         .routerUnconfirmed: "待确认",
         .pingLive: "实时",
-        .showOfflineDevices: "显示离线的设备",
+        .missingDevicesTitle: "本次未发现 %d 台历史设备",
+        .missingDevicesHint: "这些设备曾在当前网段出现，但最新扫描没有找到。可重新检查，或确认已离网后移除记录。",
+        .missingDevicesCheck: "检查",
+        .missingDevicesForget: "移除记录",
+        .missingDevicesLastSeen: "上次出现 %@",
         .deviceOffline: "离线",
         .deviceAliasLabel: "备注名称",
         .deviceAliasPlaceholder: "自定义显示名称…",
@@ -348,7 +362,10 @@ enum L10n {
         .copyIP: "Copy IP",
         .historyTitle: "History",
         .historyDeviceCount: "%d devices",
+        .historySnapshotCount: "%d snapshots",
         .historyClear: "Clear History",
+        .historyClearConfirmTitle: "Clear all history?",
+        .historyClearConfirmBody: "This removes all scan snapshots, but keeps the current scan result.",
         .historyEmpty: "No history yet",
         .historyEmptyHint: "Snapshots will appear here after a LAN scan.",
         .topologyTitle: "Topology",
@@ -374,7 +391,11 @@ enum L10n {
         .routerConfirmed: "Confirmed",
         .routerUnconfirmed: "Unverified",
         .pingLive: "Live",
-        .showOfflineDevices: "Show offline devices",
+        .missingDevicesTitle: "%d known devices missing",
+        .missingDevicesHint: "These devices appeared on this segment before, but were not found in the latest scan. Check again or remove the record after confirming.",
+        .missingDevicesCheck: "Check",
+        .missingDevicesForget: "Remove",
+        .missingDevicesLastSeen: "Last seen %@",
         .deviceOffline: "Offline",
         .deviceAliasLabel: "Display name",
         .deviceAliasPlaceholder: "Custom label…",

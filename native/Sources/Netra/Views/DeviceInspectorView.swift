@@ -10,6 +10,7 @@ struct DeviceInspectorView: View {
     let device: LanDevice?
 
     @State private var aliasDraft = ""
+    @State private var isEditingAlias = false
 
     var body: some View {
         Group {
@@ -17,15 +18,14 @@ struct DeviceInspectorView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         header(device)
-                        aliasSection(device)
                         metaGrid(device)
                         portsSection(device)
                         actions(device)
                     }
                     .padding(20)
                 }
-                .onAppear { aliasDraft = notes.alias(for: device.ip) ?? "" }
-                .onChange(of: device.ip) { _ in aliasDraft = notes.alias(for: device.ip) ?? "" }
+                .onAppear { resetAliasDraft(for: device) }
+                .onChange(of: device.ip) { _ in resetAliasDraft(for: device) }
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "sidebar.right")
@@ -50,8 +50,33 @@ struct DeviceInspectorView: View {
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
-                        Text(display)
-                            .font(.system(.title2, design: .rounded).weight(.bold))
+                        if isEditingAlias {
+                            TextField(prefs.l10n(.deviceAliasPlaceholder), text: $aliasDraft)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(.title3, design: .rounded).weight(.bold))
+                                .onSubmit { saveAlias(for: device) }
+                            Button {
+                                saveAlias(for: device)
+                            } label: {
+                                Image(systemName: "checkmark.circle.fill")
+                            }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(theme.accent)
+                            .help(prefs.l10n(.deviceAliasSave))
+                        } else {
+                            Text(display.isEmpty ? device.ip : display)
+                                .font(.system(.title2, design: .rounded).weight(.bold))
+                                .lineLimit(2)
+                            Button {
+                                aliasDraft = notes.alias(for: device.ip) ?? display
+                                isEditingAlias = true
+                            } label: {
+                                Image(systemName: "pencil")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.borderless)
+                            .help(prefs.l10n(.deviceAliasLabel))
+                        }
                         if !device.isOnline {
                             Text(prefs.l10n(.deviceOffline))
                                 .font(.caption)
@@ -65,12 +90,8 @@ struct DeviceInspectorView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    Text(device.ip)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundStyle(theme.accent)
-                    Text(device.mac)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    valueWithCopy(device.ip, value: device.ip, style: .ip)
+                    valueWithCopy(device.mac, value: device.mac, style: .mac)
                 }
                 Spacer()
                 Button {
@@ -85,20 +106,18 @@ struct DeviceInspectorView: View {
         }
     }
 
-    private func aliasSection(_ device: LanDevice) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(prefs.l10n(.deviceAliasLabel))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack {
-                TextField(prefs.l10n(.deviceAliasPlaceholder), text: $aliasDraft)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit { notes.setAlias(aliasDraft, for: device.ip) }
-                Button(prefs.l10n(.deviceAliasSave)) {
-                    notes.setAlias(aliasDraft, for: device.ip)
-                }
-                .buttonStyle(FuturisticButtonStyle())
-            }
+    private enum InspectorValueStyle {
+        case ip, mac
+    }
+
+    private func valueWithCopy(_ text: String, value: String, style: InspectorValueStyle) -> some View {
+        HStack(spacing: 5) {
+            Text(text)
+                .font(style == .ip ? .system(.body, design: .monospaced) : .caption.monospaced())
+                .foregroundStyle(style == .ip ? AnyShapeStyle(theme.accent) : AnyShapeStyle(.secondary))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            CopyIconButton(value: value)
         }
     }
 
@@ -120,7 +139,7 @@ struct DeviceInspectorView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+        .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func portsSection(_ device: LanDevice) -> some View {
@@ -150,11 +169,6 @@ struct DeviceInspectorView: View {
 
     private func actions(_ device: LanDevice) -> some View {
         HStack {
-            Button(prefs.l10n(.copyIP)) {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(device.ip, forType: .string)
-            }
-            .buttonStyle(FuturisticButtonStyle())
             Button(app.rescanningDeviceIP == device.ip ? prefs.l10n(.deviceRescanning) : prefs.l10n(.deviceRescan)) {
                 Task { await app.rescanDevice(device) }
             }
@@ -162,5 +176,15 @@ struct DeviceInspectorView: View {
             .disabled(app.rescanningDeviceIP == device.ip)
             Spacer()
         }
+    }
+
+    private func resetAliasDraft(for device: LanDevice) {
+        aliasDraft = notes.alias(for: device.ip) ?? ""
+        isEditingAlias = false
+    }
+
+    private func saveAlias(for device: LanDevice) {
+        notes.setAlias(aliasDraft, for: device.ip)
+        isEditingAlias = false
     }
 }

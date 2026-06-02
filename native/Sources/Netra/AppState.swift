@@ -47,8 +47,9 @@ final class AppState: ObservableObject {
     @Published var tableSortColumn: DeviceTableColumn = .ip
     @Published var tableSortAscending = true
     @Published var qualityWatch: [String] = []
-    @Published var showOfflineDevices = UserDefaults.standard.bool(forKey: "netra.showOfflineDevices")
     @Published var rescanningDeviceIP: String?
+    @Published var missingDevicesExpanded = false
+    @Published private(set) var currentScanSegment = ""
 
     private var pingLoopTask: Task<Void, Never>?
     private var ouiObserver: NSObjectProtocol?
@@ -59,15 +60,8 @@ final class AppState: ObservableObject {
     }
     private let snapshotsKey = "netra.scanHistory"
 
-    var allDevices: [LanDevice] {
-        guard showOfflineDevices else { return devices }
-        let onlineIPs = Set(devices.map(\.ip))
-        let offline = KnownDevicesStore.shared.offlineDevices(excludingOnline: onlineIPs)
-        return (devices + offline).sorted { $0.ip.localizedStandardCompare($1.ip) == .orderedAscending }
-    }
-
     var filteredDevices: [LanDevice] {
-        allDevices.filter { device in
+        devices.filter { device in
             if !segmentFilter.isEmpty, device.segment != segmentFilter { return false }
             if !roleFilter.isEmpty, !device.role.contains(roleFilter) { return false }
             if !searchText.isEmpty {
@@ -78,6 +72,18 @@ final class AppState: ObservableObject {
             }
             return true
         }
+    }
+
+    var missingDevices: [LanDevice] {
+        let segment = currentScanSegment.isEmpty ? segmentFromLatestResult : currentScanSegment
+        guard !segment.isEmpty, lanResult != nil, !isScanning else { return [] }
+        return KnownDevicesStore.shared.missingDevices(segment: segment, excludingOnline: Set(devices.map(\.ip)))
+    }
+
+    private var segmentFromLatestResult: String {
+        guard let ip = lanResult?.interface.ip,
+              let parsed = IPv4Helpers.parseIPv4(ip) else { return "" }
+        return IPv4Helpers.segmentID(for: parsed)
     }
 
     var availableSegments: [String] {
@@ -120,12 +126,13 @@ final class AppState: ObservableObject {
         errorMessage = ""
         if let current = try? NetworkInterfaceService.currentInterface(),
            let local = IPv4Helpers.parseIPv4(current.ip) {
-            KnownDevicesStore.shared.clear(segment: IPv4Helpers.segmentID(for: local))
+            currentScanSegment = IPv4Helpers.segmentID(for: local)
         }
         devices = []
         lanResult = nil
         selectedDevice = nil
         isDeviceInspectorPresented = false
+        missingDevicesExpanded = false
         segmentFilter = ""
         gatewayPings = [:]
         pingHistory = [:]
@@ -226,9 +233,12 @@ final class AppState: ObservableObject {
         NSWorkspace.shared.open(url)
     }
 
-    func setShowOfflineDevices(_ value: Bool) {
-        showOfflineDevices = value
-        UserDefaults.standard.set(value, forKey: "netra.showOfflineDevices")
+    func forgetKnownDevice(_ device: LanDevice) {
+        KnownDevicesStore.shared.remove(ip: device.ip)
+        if selectedDevice?.ip == device.ip {
+            closeDeviceInspector()
+        }
+        objectWillChange.send()
     }
 
     func refreshWifi() {

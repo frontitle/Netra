@@ -12,15 +12,17 @@ struct ContentView: View {
             if showsInspector {
                 NavigationSplitView {
                     sidebar
+                        .navigationSplitViewColumnWidth(min: 220, ideal: 220, max: 220)
                 } content: {
                     mainPane
                 } detail: {
                     detailPane
-                        .frame(minWidth: 300, idealWidth: 360)
+                        .frame(minWidth: 260, idealWidth: 300, maxWidth: 340)
                 }
             } else {
                 NavigationSplitView {
                     sidebar
+                        .navigationSplitViewColumnWidth(min: 220, ideal: 220, max: 220)
                 } detail: {
                     mainPane
                 }

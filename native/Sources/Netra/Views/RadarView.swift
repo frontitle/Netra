@@ -24,9 +24,9 @@ struct RadarView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 12)
             }
-            offlineToggle
+            missingDevicesNotice
                 .padding(.horizontal, 20)
-                .padding(.bottom, 6)
+                .padding(.bottom, app.missingDevices.isEmpty ? 0 : 8)
             filterBar
                 .padding(.horizontal, 20)
                 .padding(.bottom, 8)
@@ -69,8 +69,13 @@ struct RadarView: View {
             if app.isScanning {
                 ProgressView().controlSize(.small).padding(.trailing, 8)
             }
-            Button(app.isScanning ? prefs.l10n(.radarCancel) : prefs.l10n(.radarScan)) {
+            Button {
                 if app.isScanning { app.cancelScan() } else { Task { await app.runFullScan() } }
+            } label: {
+                Label(
+                    app.isScanning ? prefs.l10n(.radarCancel) : prefs.l10n(.radarScan),
+                    systemImage: app.isScanning ? "stop.fill" : "dot.radiowaves.left.and.right"
+                )
             }
             .buttonStyle(FuturisticButtonStyle(prominent: true))
             .keyboardShortcut("r", modifiers: .command)
@@ -78,14 +83,78 @@ struct RadarView: View {
         }
     }
 
-    private var offlineToggle: some View {
-        Toggle(isOn: Binding(
-            get: { app.showOfflineDevices },
-            set: { app.setShowOfflineDevices($0) }
-        )) {
-            Text(prefs.l10n(.showOfflineDevices))
+    @ViewBuilder
+    private var missingDevicesNotice: some View {
+        let missing = app.missingDevices
+        if !missing.isEmpty {
+            DisclosureGroup(isExpanded: $app.missingDevicesExpanded) {
+                VStack(spacing: 0) {
+                    ForEach(missing) { device in
+                        HStack(spacing: 10) {
+                            Image(systemName: "questionmark.diamond")
+                                .foregroundStyle(.orange)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(DeviceNotesStore.shared.displayName(discovered: device.hostname, ip: device.ip))
+                                    .font(.callout.weight(.semibold))
+                                HStack(spacing: 8) {
+                                    Text(device.ip)
+                                        .font(.system(.caption, design: .monospaced))
+                                    if let lastSeen = KnownDevicesStore.shared.lastSeen(ip: device.ip) {
+                                        Text(String(format: prefs.l10n(.missingDevicesLastSeen), Self.relativeDate(lastSeen)))
+                                    }
+                                }
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button {
+                                app.selectedDevice = device
+                                app.isDeviceInspectorPresented = true
+                            } label: {
+                                Image(systemName: "sidebar.right")
+                            }
+                            .buttonStyle(.borderless)
+                            .help(prefs.l10n(.inspectorSelectDevice))
+                            Button {
+                                Task { await app.rescanDevice(device) }
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                            .buttonStyle(.borderless)
+                            .help(prefs.l10n(.missingDevicesCheck))
+                            .disabled(app.rescanningDeviceIP == device.ip)
+                            Button(role: .destructive) {
+                                app.forgetKnownDevice(device)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                            .help(prefs.l10n(.missingDevicesForget))
+                        }
+                        .padding(.vertical, 8)
+                        if device.id != missing.last?.id {
+                            Divider()
+                        }
+                    }
+                }
+                .padding(.top, 8)
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.magnifyingglass")
+                        .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(String(format: prefs.l10n(.missingDevicesTitle), missing.count))
+                            .font(.callout.weight(.semibold))
+                        Text(prefs.l10n(.missingDevicesHint))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+            }
+            .padding(10)
+            .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
         }
-        .toggleStyle(.checkbox)
     }
 
     private var filterBar: some View {
@@ -107,5 +176,11 @@ struct RadarView: View {
             TextField(prefs.l10n(.searchPlaceholder), text: $app.searchText)
                 .textFieldStyle(.roundedBorder)
         }
+    }
+
+    private static func relativeDate(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }

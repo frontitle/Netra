@@ -24,7 +24,8 @@ struct NetraLogo: View {
     }
 
     private static let nsImage: NSImage? = {
-        if let url = Bundle.module.url(forResource: "AppIcon", withExtension: "png"),
+        if let url = Bundle.module.url(forResource: "AppIcon", withExtension: "png")
+            ?? Bundle.main.url(forResource: "AppIcon", withExtension: "png"),
            let img = NSImage(contentsOf: url) {
             return img
         }

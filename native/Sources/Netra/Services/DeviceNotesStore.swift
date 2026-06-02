@@ -10,10 +10,7 @@ final class DeviceNotesStore: ObservableObject {
     private let fileURL: URL
 
     private init() {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("Netra", isDirectory: true)
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        fileURL = base.appendingPathComponent("device-notes.json")
+        fileURL = AppStorage.supportDirectory().appendingPathComponent("device-notes.json")
         load()
     }
 

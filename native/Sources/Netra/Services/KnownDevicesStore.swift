@@ -12,7 +12,7 @@ struct KnownDeviceRecord: Codable, Hashable {
     var lastSeen: Date
 }
 
-/// 记录历史上见过的设备，用于「显示离线设备」。
+/// 记录历史上见过的设备，用于提示本次扫描中消失的设备。
 final class KnownDevicesStore {
     static let shared = KnownDevicesStore()
 
@@ -20,36 +20,29 @@ final class KnownDevicesStore {
     private let fileURL: URL
 
     private init() {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("Netra", isDirectory: true)
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        fileURL = base.appendingPathComponent("known-devices.json")
+        fileURL = AppStorage.supportDirectory().appendingPathComponent("known-devices.json")
         load()
     }
 
     func applyScan(_ online: [LanDevice]) {
         let now = Date()
-        let onlineIPs = Set(online.map(\.ip))
         for d in online {
             records[d.ip] = KnownDeviceRecord(
                 ip: d.ip, mac: d.mac, hostname: d.hostname, vendor: d.vendor,
                 role: d.role, os: d.os, segment: d.segment, ports: d.ports, lastSeen: now
             )
         }
-        for ip in records.keys where !onlineIPs.contains(ip) {
-            // 保留离线记录，仅更新 lastSeen 不触碰
-        }
         save()
     }
 
-    func clear(segment: String) {
-        records = records.filter { $0.value.segment != segment }
+    func remove(ip: String) {
+        records.removeValue(forKey: ip)
         save()
     }
 
-    func offlineDevices(excludingOnline onlineIPs: Set<String>) -> [LanDevice] {
+    func missingDevices(segment: String, excludingOnline onlineIPs: Set<String>) -> [LanDevice] {
         records.values
-            .filter { !onlineIPs.contains($0.ip) }
+            .filter { $0.segment == segment && !onlineIPs.contains($0.ip) }
             .map { r in
                 LanDevice(
                     ip: r.ip, mac: r.mac, vendor: r.vendor, hostname: r.hostname,
@@ -59,6 +52,10 @@ final class KnownDevicesStore {
                 )
             }
             .sorted { $0.ip.localizedStandardCompare($1.ip) == .orderedAscending }
+    }
+
+    func lastSeen(ip: String) -> Date? {
+        records[ip]?.lastSeen
     }
 
     private func load() {
