@@ -151,6 +151,7 @@ final class AppState: ObservableObject {
                 }
                 await MainActor.run {
                     self.wifiNetworks = wifi
+                    self.replaceDevicesWithFinalScan(lan.devices)
                     self.lanResult = lan
                     KnownDevicesStore.shared.applyScan(lan.devices)
                     self.scanFoundCount = lan.devices.count
@@ -308,6 +309,14 @@ final class AppState: ObservableObject {
         if shouldOpenInspector {
             selectedDevice = online
             isDeviceInspectorPresented = true
+        }
+    }
+
+    private func replaceDevicesWithFinalScan(_ finalDevices: [LanDevice]) {
+        devices = finalDevices.sorted { $0.ip.localizedStandardCompare($1.ip) == .orderedAscending }
+        if let selected = selectedDevice,
+           let refreshed = devices.first(where: { $0.ip == selected.ip }) {
+            selectedDevice = refreshed
         }
     }
 

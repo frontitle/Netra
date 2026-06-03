@@ -41,7 +41,11 @@ enum LANScanner {
 
         let primaryCandidate = [(IPv4Helpers.networkBase(localIP, cidr: interface.cidr), min(max(interface.cidr, 24), 30))]
         let primaryTargets = collectPingTargets(primaryCandidate, maxPerSegment: 254, maxTotal: 254)
-        let primaryReachable = PingService.sweepReachable(primaryTargets.map { IPv4Helpers.ipv4String($0) })
+        emitScanStartedDevices(localIP: localIP, interface: interface, arpEntries: arpEntries, onDeviceFound: onDeviceFound)
+        let primaryReachable = PingService.sweepReachable(primaryTargets.map { IPv4Helpers.ipv4String($0) }) { ipString in
+            guard let ip = IPv4Helpers.parseIPv4(ipString) else { return }
+            emitPlaceholderDevice(ip: ip, interface: interface, arpEntry: nil, onDeviceFound: onDeviceFound)
+        }
         if ScanCancellation.shared.isCancelled { return cancelledResult(interface: interface) }
         Thread.sleep(forTimeInterval: 0.08)
         arpEntries = ARPService.readAll()
@@ -76,7 +80,10 @@ enum LANScanner {
         var scannedSegmentKeys = Set(primaryCandidate.map { segKey($0.0, $0.1) })
         let deferredCandidates = candidates.filter { !scannedSegmentKeys.contains(segKey($0.0, $0.1)) }
         let initialTargets = collectPingTargets(deferredCandidates)
-        PingService.sweep(initialTargets.map { IPv4Helpers.ipv4String($0) })
+        _ = PingService.sweepReachable(initialTargets.map { IPv4Helpers.ipv4String($0) }) { ipString in
+            guard let ip = IPv4Helpers.parseIPv4(ipString) else { return }
+            emitPlaceholderDevice(ip: ip, interface: interface, arpEntry: nil, onDeviceFound: onDeviceFound)
+        }
         deferredCandidates.forEach { scannedSegmentKeys.insert(segKey($0.0, $0.1)) }
         var udpDiscovered = PortScanner.discoverUDPResponders(ips: primaryTargets + initialTargets, ports: IPv4Helpers.udpProbePorts)
         if ScanCancellation.shared.isCancelled { return cancelledResult(interface: interface) }
@@ -99,7 +106,10 @@ enum LANScanner {
             }
             candidates.append(contentsOf: extra)
             let extraTargets = collectPingTargets(extra)
-            PingService.sweep(extraTargets.map { IPv4Helpers.ipv4String($0) })
+            _ = PingService.sweepReachable(extraTargets.map { IPv4Helpers.ipv4String($0) }) { ipString in
+                guard let ip = IPv4Helpers.parseIPv4(ipString) else { return }
+                emitPlaceholderDevice(ip: ip, interface: interface, arpEntry: nil, onDeviceFound: onDeviceFound)
+            }
             udpDiscovered.formUnion(PortScanner.discoverUDPResponders(ips: extraTargets, ports: IPv4Helpers.udpProbePorts))
             Thread.sleep(forTimeInterval: 0.12)
             arpEntries = ARPService.readAll()
@@ -288,27 +298,46 @@ enum LANScanner {
         arpEntries: [IPv4Address: ArpEntry],
         onDeviceFound: ((LanDevice) -> Void)?
     ) {
-        guard let onDeviceFound else { return }
         for ip in ips where IPv4Helpers.isValidHost(ip) {
             if ScanCancellation.shared.isCancelled { break }
-            let ipStr = IPv4Helpers.ipv4String(ip)
-            let arp = arpEntries[ip]
-            let mac = arp?.mac ?? "扫描中…"
-            let hostname = arp?.hostname ?? "扫描中…"
-            let role = ipStr == interface.gateway ? "网关 / 识别中…" : "扫描中…"
-            onDeviceFound(LanDevice(
-                ip: ipStr,
-                mac: mac,
-                vendor: "扫描中…",
-                hostname: hostname,
-                localDNS: "—",
-                os: "Unknown",
-                role: role,
-                segment: IPv4Helpers.segmentID(for: ip),
-                ports: [],
-                isOnline: true
-            ))
+            emitPlaceholderDevice(ip: ip, interface: interface, arpEntry: arpEntries[ip], onDeviceFound: onDeviceFound)
         }
+    }
+
+    private static func emitScanStartedDevices(
+        localIP: IPv4Address,
+        interface: NetworkInterface,
+        arpEntries: [IPv4Address: ArpEntry],
+        onDeviceFound: ((LanDevice) -> Void)?
+    ) {
+        emitPlaceholderDevice(ip: localIP, interface: interface, arpEntry: arpEntries[localIP], onDeviceFound: onDeviceFound)
+        if let gateway = IPv4Helpers.parseIPv4(interface.gateway) {
+            emitPlaceholderDevice(ip: gateway, interface: interface, arpEntry: arpEntries[gateway], onDeviceFound: onDeviceFound)
+        }
+    }
+
+    private static func emitPlaceholderDevice(
+        ip: IPv4Address,
+        interface: NetworkInterface,
+        arpEntry: ArpEntry?,
+        onDeviceFound: ((LanDevice) -> Void)?
+    ) {
+        guard let onDeviceFound, IPv4Helpers.isValidHost(ip) else { return }
+        let ipStr = IPv4Helpers.ipv4String(ip)
+        let hostname = DeviceInference.hostname(from: arpEntry?.hostname, ip: ipStr)
+        let role = ipStr == interface.gateway ? "网关 / 识别中…" : "扫描中…"
+        onDeviceFound(LanDevice(
+            ip: ipStr,
+            mac: arpEntry?.mac ?? "扫描中…",
+            vendor: "识别中…",
+            hostname: hostname == "—" ? "识别中…" : hostname,
+            localDNS: "—",
+            os: "Unknown",
+            role: role,
+            segment: IPv4Helpers.segmentID(for: ip),
+            ports: [],
+            isOnline: true
+        ))
     }
 
     private static func discoverLikelyUpstream(

@@ -5,7 +5,7 @@ enum PingService {
         _ = sweepReachable(ips)
     }
 
-    static func sweepReachable(_ ips: [String]) -> Set<String> {
+    static func sweepReachable(_ ips: [String], onReachable: ((String) -> Void)? = nil) -> Set<String> {
         let group = DispatchGroup()
         let lock = NSLock()
         var pending = 0
@@ -23,6 +23,7 @@ enum PingService {
                     lock.lock()
                     reachable.insert(ip)
                     lock.unlock()
+                    onReachable?(ip)
                 }
                 group.leave()
             }
