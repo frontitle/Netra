@@ -324,13 +324,12 @@ enum LANScanner {
     ) {
         guard let onDeviceFound, IPv4Helpers.isValidHost(ip) else { return }
         let ipStr = IPv4Helpers.ipv4String(ip)
-        let hostname = DeviceInference.hostname(from: arpEntry?.hostname, ip: ipStr)
         let role = ipStr == interface.gateway ? "网关 / 识别中…" : "扫描中…"
         onDeviceFound(LanDevice(
             ip: ipStr,
             mac: arpEntry?.mac ?? "扫描中…",
             vendor: "识别中…",
-            hostname: hostname == "—" ? "识别中…" : hostname,
+            hostname: "识别中…",
             localDNS: "—",
             os: "Unknown",
             role: role,

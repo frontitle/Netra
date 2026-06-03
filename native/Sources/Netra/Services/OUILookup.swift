@@ -91,7 +91,7 @@ enum OUILookup {
     private static func inferVendorFallback(mac: String, hostname: String, ports: [OpenPort]) -> String? {
         let h = hostname.lowercased()
         let portSet = Set(ports.map(\.port))
-        if isAppleHostname(h) || isApplePortSignature(portSet) {
+        if isAppleHostname(h) {
             return "Apple, Inc."
         }
         if h.contains("iphone") || h.contains("ipad") || h.contains("macbook") || h.contains("imac")
@@ -109,13 +109,6 @@ enum OUILookup {
     private static func isAppleHostname(_ h: String) -> Bool {
         h.contains("apple") || h.contains("iphone") || h.contains("ipad") || h.contains("macbook")
             || h.contains("imac") || h.contains("appletv") || h.hasSuffix(".local") && (h.contains("mac") || h.contains("iphone"))
-    }
-
-    private static func isApplePortSignature(_ ports: Set<Int>) -> Bool {
-        // 端口只是“证据”，不要包含过于泛化的 5000（很多设备/服务都会用）。
-        // 更偏 Apple 生态的组合：mDNS + AirPlay / iOS sync / AFP / VNC 等。
-        let evidence = applePortEvidence(ports)
-        return evidence >= 2
     }
 
     private static func isLocallyAdministeredMAC(_ mac: String) -> Bool {

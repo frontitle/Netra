@@ -13,6 +13,9 @@ enum DeviceInference {
             portSet.contains(62078),
         ].filter { $0 }.count
         if ip == gateway { return "Gateway / Router" }
+        if isLikelyGatewayAddress(ip), isRouterLike(ports: portSet), ip != localIP {
+            return "Router / Gateway Candidate"
+        }
         if portSet.contains(53) && (portSet.contains(67) || portSet.contains(68)) { return "DHCP / DNS Server" }
         if portSet.contains(445) || portSet.contains(139) { return "File Sharing (SMB)" }
         if appleSignals >= 2 { return "Apple Device" }
@@ -65,5 +68,18 @@ enum DeviceInference {
 
     private static func isAppleVendor(_ v: String) -> Bool {
         v.contains("apple")
+    }
+
+    private static func isLikelyGatewayAddress(_ ip: String) -> Bool {
+        guard let addr = IPv4Helpers.parseIPv4(ip) else { return false }
+        return addr.rawValue[3] == 1
+    }
+
+    private static func isRouterLike(ports: Set<Int>) -> Bool {
+        ports.contains(53)
+            || ports.contains(80)
+            || ports.contains(443)
+            || ports.contains(8080)
+            || ports.contains(8443)
     }
 }
