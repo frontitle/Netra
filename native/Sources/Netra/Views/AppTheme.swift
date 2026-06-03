@@ -5,13 +5,11 @@ enum AppTheme {
         LinearGradient(
             colors: dark
                 ? [
-                    Color(red: 0.06, green: 0.07, blue: 0.10),
-                    Color(red: 0.08, green: 0.09, blue: 0.13),
-                    Color(red: 0.05, green: 0.07, blue: 0.11),
+                    Color(red: 0.10, green: 0.11, blue: 0.13),
+                    Color(red: 0.08, green: 0.09, blue: 0.11),
                 ]
                 : [
-                    Color(red: 0.96, green: 0.97, blue: 0.98),
-                    Color(red: 0.91, green: 0.94, blue: 0.97),
+                    Color(red: 0.97, green: 0.98, blue: 0.99),
                     Color(red: 0.94, green: 0.96, blue: 0.98),
                 ],
             startPoint: .topLeading,
@@ -22,19 +20,12 @@ enum AppTheme {
 
     static func glassPanel(cornerRadius: CGFloat = 8, theme: ThemeColors) -> some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(.ultraThinMaterial)
+            .fill(.regularMaterial)
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [theme.accent.opacity(0.5), .white.opacity(0.08)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
+                    .stroke(.secondary.opacity(0.12), lineWidth: 1)
             )
-            .shadow(color: .black.opacity(0.16), radius: 16, y: 8)
+            .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
     }
 }
 
@@ -49,11 +40,15 @@ struct FuturisticButtonStyle: ButtonStyle {
             .padding(.vertical, 8)
             .background {
                 if prominent {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(
-                        LinearGradient(colors: [theme.accent, theme.accentDim], startPoint: .top, endPoint: .bottom)
-                    )
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(theme.accent)
                 } else {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.white.opacity(0.08))
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(.regularMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(.secondary.opacity(0.16), lineWidth: 1)
+                        )
                 }
             }
             .foregroundStyle(prominent ? .white : .primary)

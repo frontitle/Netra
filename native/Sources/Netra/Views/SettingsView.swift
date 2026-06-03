@@ -64,7 +64,7 @@ struct SettingsView: View {
                 }
             }
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                LabeledContent(prefs.l10n(.version), value: AppVersion.display)
+                LabeledContent(prefs.l10n(.version), value: AppVersion.short)
                 if AppVersion.isBeta {
                     Text("BETA")
                         .font(.caption2.weight(.bold))
@@ -77,8 +77,6 @@ struct SettingsView: View {
                     updateBadge
                 }
             }
-            LabeledContent(prefs.l10n(.buildNumber), value: AppVersion.build)
-            LabeledContent(prefs.l10n(.aboutRuntime), value: "Swift Native")
             if prefs.updateAvailable, let ver = prefs.latestReleaseVersion {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.down.circle.fill")
@@ -142,10 +140,6 @@ struct SettingsView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(prefs.l10n(.brandStory))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
             Text(prefs.l10n(.copyright))
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
@@ -193,7 +187,6 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(title)
                 .font(.headline)
-                .foregroundStyle(theme.accent)
             VStack(alignment: .leading, spacing: 12) {
                 content()
             }
