@@ -155,9 +155,19 @@ enum OUILookup {
     }
 
     private static func resourceURL(name: String, extension ext: String) -> URL? {
-        Bundle.module.url(forResource: name, withExtension: ext)
-            ?? Bundle.main.url(forResource: name, withExtension: ext)
-            ?? Bundle.main.resourceURL?.appendingPathComponent("\(name).\(ext)")
+        if let url = Bundle.main.url(forResource: name, withExtension: ext) {
+            return url
+        }
+        if let url = Bundle.main.resourceURL?.appendingPathComponent("\(name).\(ext)"),
+           FileManager.default.fileExists(atPath: url.path) {
+            return url
+        }
+        for bundle in Bundle.allBundles + Bundle.allFrameworks {
+            if let url = bundle.url(forResource: name, withExtension: ext) {
+                return url
+            }
+        }
+        return nil
     }
 
     private static func normalizeOUIKey(_ raw: String) -> String {

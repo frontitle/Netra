@@ -24,10 +24,17 @@ struct NetraLogo: View {
     }
 
     private static let nsImage: NSImage? = {
-        if let url = Bundle.module.url(forResource: "AppIcon", withExtension: "png")
-            ?? Bundle.main.url(forResource: "AppIcon", withExtension: "png"),
-           let img = NSImage(contentsOf: url) {
-            return img
+        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "png")
+            ?? Bundle.main.resourceURL?.appendingPathComponent("AppIcon.png"),
+           FileManager.default.fileExists(atPath: url.path),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
+        for bundle in Bundle.allBundles + Bundle.allFrameworks {
+            if let url = bundle.url(forResource: "AppIcon", withExtension: "png"),
+               let image = NSImage(contentsOf: url) {
+                return image
+            }
         }
         return nil
     }()
