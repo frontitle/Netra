@@ -102,7 +102,7 @@ struct DeviceTableView: NSViewRepresentable {
         }
       }
     }
-    let signature = devices.map { "\($0.ip)|\($0.isOnline)|\($0.hostname)|\($0.ports.map(\.port))" }.joined(separator: "\n")
+    let signature = devices.map { "\($0.ip)|\($0.isOnline)|\($0.hostname)|\($0.vendor)|\($0.role)|\($0.os)|\($0.ports.map(\.port))" }.joined(separator: "\n")
       + "|\(prefs.language.rawValue)|\(notes.revision)"
     guard signature != context.coordinator.lastDeviceSignature else { return }
     context.coordinator.lastDeviceSignature = signature
@@ -215,8 +215,9 @@ struct DeviceTableView: NSViewRepresentable {
       case .ip: return device.ip
       case .hostname:
         let discovered = device.hostname.isEmpty || device.hostname == "—" ? "—" : device.hostname
-        if device.isOnline { return discovered }
-        return "\(discovered) (\(L10n.string(.deviceOffline, language: language)))"
+        let display = DeviceNotesStore.shared.displayName(discovered: discovered, device: device)
+        if device.isOnline { return display }
+        return "\(display) (\(L10n.string(.deviceOffline, language: language)))"
       case .vendor: return device.vendor
       case .role: return device.role
       case .ports:

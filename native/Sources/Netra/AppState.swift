@@ -66,8 +66,8 @@ final class AppState: ObservableObject {
             if !roleFilter.isEmpty, !device.role.contains(roleFilter) { return false }
             if !searchText.isEmpty {
                 let q = searchText.lowercased()
-                let alias = DeviceNotesStore.shared.alias(for: device.ip) ?? ""
-                let hay = [device.ip, device.hostname, alias, device.vendor, device.mac, device.role].joined(separator: " ").lowercased()
+                let alias = DeviceNotesStore.shared.alias(for: device) ?? ""
+                let hay = [device.ip, device.hostname, alias, device.vendor, device.mac, device.role, device.os].joined(separator: " ").lowercased()
                 if !hay.contains(q) { return false }
             }
             return true
@@ -151,10 +151,13 @@ final class AppState: ObservableObject {
                 }
                 await MainActor.run {
                     self.wifiNetworks = wifi
-                    self.replaceDevicesWithFinalScan(lan.devices)
-                    self.lanResult = lan
-                    KnownDevicesStore.shared.applyScan(lan.devices)
-                    self.scanFoundCount = lan.devices.count
+                    let annotatedDevices = self.annotatedDevices(lan.devices)
+                    var annotatedLan = lan
+                    annotatedLan.devices = annotatedDevices
+                    self.replaceDevicesWithFinalScan(annotatedDevices)
+                    self.lanResult = annotatedLan
+                    KnownDevicesStore.shared.applyScan(annotatedDevices)
+                    self.scanFoundCount = annotatedDevices.count
                     self.lastScanAt = Self.timeString(Date())
                     self.saveSnapshot(wifi: wifi, lan: lan)
                     self.isScanning = false
@@ -197,9 +200,10 @@ final class AppState: ObservableObject {
         rescanningDeviceIP = device.ip
         defer { rescanningDeviceIP = nil }
         do {
-            let refreshed = try await Task.detached(priority: .userInitiated) {
+            let rawRefreshed = try await Task.detached(priority: .userInitiated) {
                 try LANScanner.scanDevice(ip: device.ip)
             }.value
+            let refreshed = DeviceNotesStore.shared.applyOverrides(to: rawRefreshed)
             upsertDevice(refreshed)
             isDeviceInspectorPresented = true
             if var lan = lanResult {
@@ -284,8 +288,22 @@ final class AppState: ObservableObject {
             let vendor = OUILookup.vendor(for: mac, hostname: d.hostname, ports: d.ports)
             if d.vendor != vendor {
                 devices[i].vendor = vendor
-                let os = DeviceInference.inferOS(ports: d.ports, vendor: vendor, mac: mac)
-                devices[i].os = os
+                let os = DeviceInference.inferOS(ports: d.ports, vendor: vendor, mac: mac, hostname: d.hostname)
+                var updated = devices[i]
+                updated.vendor = vendor
+                updated.os = os
+                if let interface = lanResult?.interface {
+                    updated.role = DeviceInference.inferRole(
+                        ip: d.ip,
+                        localIP: interface.ip,
+                        gateway: interface.gateway,
+                        vendor: vendor,
+                        hostname: d.hostname,
+                        ports: d.ports
+                    )
+                }
+                updated = DeviceNotesStore.shared.applyOverrides(to: updated)
+                devices[i] = updated
                 changed = true
             }
         }
@@ -297,7 +315,7 @@ final class AppState: ObservableObject {
     }
 
     private func upsertDevice(_ device: LanDevice) {
-        var online = device
+        var online = DeviceNotesStore.shared.applyOverrides(to: device)
         online.isOnline = true
         let shouldOpenInspector = selectedDevice?.ip == online.ip
         if let idx = devices.firstIndex(where: { $0.ip == online.ip }) {
@@ -313,11 +331,52 @@ final class AppState: ObservableObject {
     }
 
     private func replaceDevicesWithFinalScan(_ finalDevices: [LanDevice]) {
-        devices = finalDevices.sorted { $0.ip.localizedStandardCompare($1.ip) == .orderedAscending }
+        devices = annotatedDevices(finalDevices).sorted { $0.ip.localizedStandardCompare($1.ip) == .orderedAscending }
         if let selected = selectedDevice,
            let refreshed = devices.first(where: { $0.ip == selected.ip }) {
             selectedDevice = refreshed
         }
+    }
+
+    func applyUserOverrides(for device: LanDevice) {
+        let annotated = DeviceNotesStore.shared.applyOverrides(to: inferredDevice(from: device))
+        if let idx = devices.firstIndex(where: { $0.ip == annotated.ip }) {
+            devices[idx] = annotated
+        }
+        if var lan = lanResult,
+           let idx = lan.devices.firstIndex(where: { $0.ip == annotated.ip }) {
+            lan.devices[idx] = annotated
+            lanResult = lan
+        }
+        if selectedDevice?.ip == annotated.ip {
+            selectedDevice = annotated
+            isDeviceInspectorPresented = true
+        }
+    }
+
+    private func annotatedDevices(_ source: [LanDevice]) -> [LanDevice] {
+        source.map { DeviceNotesStore.shared.applyOverrides(to: $0) }
+    }
+
+    private func inferredDevice(from device: LanDevice) -> LanDevice {
+        var base = device
+        base.os = DeviceInference.inferOS(
+            ports: device.ports,
+            vendor: device.vendor,
+            mac: device.mac,
+            hostname: device.hostname
+        )
+        if let interface = lanResult?.interface {
+            base.role = DeviceInference.inferRole(
+                ip: device.ip,
+                localIP: interface.ip,
+                gateway: interface.gateway,
+                vendor: device.vendor,
+                hostname: device.hostname,
+                ports: device.ports
+            )
+        }
+        return base
     }
 
     func stopPingLoop() {

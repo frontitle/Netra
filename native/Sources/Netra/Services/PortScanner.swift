@@ -179,14 +179,18 @@ enum PortScanner {
     static func serviceName(_ port: UInt16) -> String {
         switch port {
         case 22: return "SSH"
+        case 23: return "Telnet"
         case 53: return "DNS"
         case 80: return "HTTP"
+        case 81, 88: return "HTTP Alt"
         case 443: return "HTTPS"
         case 445: return "SMB"
         case 548: return "AFP"
+        case 554, 8554: return "RTSP"
         case 631: return "IPP"
         case 502: return "Modbus"
         case 5900: return "VNC"
+        case 37777, 37778: return "Dahua/NVR"
         case 62078: return "iOS Sync"
         default: return "TCP/\(port)"
         }
@@ -205,8 +209,11 @@ enum PortScanner {
 
     static func portHint(_ port: UInt16) -> String {
         switch port {
-        case 80, 443, 8080: return "Web 管理或服务"
+        case 80, 81, 88, 443, 8080: return "Web 管理或服务"
         case 22: return "SSH 远程管理"
+        case 23: return "Telnet 远程管理"
+        case 554, 8554: return "摄像头/流媒体 RTSP"
+        case 37777, 37778: return "NVR/IPC 私有协议"
         case 445: return "Windows 文件共享"
         default: return "开放端口"
         }

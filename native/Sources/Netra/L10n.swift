@@ -118,6 +118,9 @@ enum L10nKey: String, CaseIterable {
     case deviceAliasLabel
     case deviceAliasPlaceholder
     case deviceAliasSave
+    case deviceAnnotationTitle
+    case deviceAnnotationPick
+    case deviceAnnotationClear
     case deviceRescan
     case deviceRescanning
     case deviceDiscoveredName
@@ -264,6 +267,9 @@ enum L10n {
         .deviceAliasLabel: "备注名称",
         .deviceAliasPlaceholder: "自定义显示名称…",
         .deviceAliasSave: "保存",
+        .deviceAnnotationTitle: "用户标注",
+        .deviceAnnotationPick: "选择常用标注",
+        .deviceAnnotationClear: "清除标注",
         .deviceRescan: "重新扫描此设备",
         .deviceRescanning: "扫描中…",
         .deviceDiscoveredName: "发现名称：%@",
@@ -400,6 +406,9 @@ enum L10n {
         .deviceAliasLabel: "Display name",
         .deviceAliasPlaceholder: "Custom label…",
         .deviceAliasSave: "Save",
+        .deviceAnnotationTitle: "User Labels",
+        .deviceAnnotationPick: "Choose a common label",
+        .deviceAnnotationClear: "Clear label",
         .deviceRescan: "Rescan Device",
         .deviceRescanning: "Scanning…",
         .deviceDiscoveredName: "Discovered: %@",

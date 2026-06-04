@@ -103,7 +103,7 @@ struct RadarView: View {
                             Image(systemName: "questionmark.diamond")
                                 .foregroundStyle(.orange)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(DeviceNotesStore.shared.displayName(discovered: device.hostname, ip: device.ip))
+                                Text(DeviceNotesStore.shared.displayName(discovered: device.hostname, device: device))
                                     .font(.callout.weight(.semibold))
                                 HStack(spacing: 8) {
                                     Text(device.ip)
